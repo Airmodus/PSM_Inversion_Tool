@@ -52,7 +52,7 @@ filePath = os.path.realpath(os.path.dirname(__file__))
 # store main directory path
 mainPath = os.path.realpath(os.path.join(filePath, os.pardir))
 
-class DateTimeAxisItem(AxisItem):
+class DateTimeAxisItem(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
         return [time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(value)) for value in values]
 
@@ -60,7 +60,7 @@ class TimeAxisItem(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
         return [datetime.datetime.fromtimestamp(value) for value in values]
 
-class TimeAxisItemForRaw(AxisItem):
+class TimeAxisItemForRaw(pg.AxisItem):
     def __init__(self, posix_timestamps, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.posix_timestamps = posix_timestamps
@@ -83,7 +83,7 @@ class TimeAxisItemForRaw(AxisItem):
         values = [(level, [value for value in tick_values if minVal <= value <= maxVal]) for level, tick_values in values]
         return values
 
-class TimeAxisItemForContour(AxisItem):
+class TimeAxisItemForContour(pg.AxisItem):
     def __init__(self,marker,scan_start_time, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.marker = marker
@@ -452,11 +452,11 @@ class MainWindow(QMainWindow):
         ext_dilution_fac_label = QLabel("External Dilution Factor")
         left_layout.addWidget(ext_dilution_fac_label,6,0)
         # Allow for float values in the external dilution factor input
-        dil_validator = QtGui.QDoubleValidator()
+        dil_validator = QDoubleValidator()
         # Change locale to English to allow for decimal point
         locale = QLocale(QLocale.English, QLocale.UnitedStates)
         dil_validator.setLocale(locale)
-        dil_validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+        dil_validator.setNotation(QDoubleValidator.StandardNotation)
         dil_validator.setDecimals(2)
         self.ext_dilution_fac_input = QLineEdit()
         self.ext_dilution_fac_input.setFixedWidth(30)
@@ -613,7 +613,7 @@ class MainWindow(QMainWindow):
 
             self.raw_plot.addItem(self.raw_plot_marker)
             # Create the ScatterPlotItem and set colors
-            scatter_plot_item = ScatterPlotItem(self.posix_timestamps, concentration_values, symbol='o', pxMode=True, pen=outline_pen)
+            scatter_plot_item = pg.ScatterPlotItem(self.posix_timestamps, concentration_values, symbol='o', pxMode=True, pen=outline_pen)
             scatter_plot_item.setBrush(brushes)
 
             self.raw_plot.setAxisItems({'bottom': TimeAxisItemForRaw(self.posix_timestamps,orientation='bottom')})
@@ -805,7 +805,7 @@ class MainWindow(QMainWindow):
                 # # Set the position of the image
                 # # TODO: All of this is a mess, but this is the place to adjust the scales.
                 # # HOW ABOUT LOG STUFF? Is the bins even correc? Most likely not
-                # tr = QtGui.QTransform()  # prepare ImageItem transformation:
+                # tr = QTransform()  # prepare ImageItem transformation:
                 # # Get the number of bins and assing it to nbin
                 # nbin = len(self.Dplot)-1
                 # max_size = np.nanmax(y)
@@ -1154,7 +1154,7 @@ class MainWindow(QMainWindow):
         x2_values = self.Ninv_avg['binCenter'].values
         y2_values = self.Ninv_avg[f'dN{current_scan}'].values
         self.size_dist_plot.addLegend(offset=(0, 1),labelTextSize='9pt')
-        self.size_dist_plot.plot(x_values, y_values, pen=pg.mkPen(color=(126, 122, 122),style=QtCore.Qt.DashLine,width=2),symbol=None, name="Single scan")
+        self.size_dist_plot.plot(x_values, y_values, pen=pg.mkPen(color=(126, 122, 122),style=Qt.DashLine,width=2),symbol=None, name="Single scan")
         self.size_dist_plot.plot(x2_values, y2_values, pen=pg.mkPen(color=(118, 209, 58),width=2), symbol=None, name=f'Average over {self.avg_n_input.text()} scans')
 
     # Remove data with errors when Remove Data with Errors button is clicked
@@ -1629,7 +1629,7 @@ class MainWindow(QMainWindow):
                 self.sync_markers(self.mid_plot_marker)
 
     def export_plot(self, plot):
-        exporter = ImageExporter(plot.scene())
+        exporter = pg.exporters.ImageExporter(plot.scene())
         file_name, _ = QFileDialog.getSaveFileName(None, "Save Image", "", "PNG (*.png);;JPEG (*.jpg);;All Files (*)")
         if file_name:
             exporter.export(file_name)
