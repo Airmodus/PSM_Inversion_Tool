@@ -6,7 +6,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.2.2"
+version_number = "0.3.0"
 
 #TODO:
 # GUI: midplotin y-akseli on tällä hetkellä vain binien lukumäärä, kun sen pitäisi olla nanometrejä
@@ -51,6 +51,8 @@ version_number = "0.2.2"
 filePath = os.path.realpath(os.path.dirname(__file__))
 # store main directory path
 mainPath = os.path.realpath(os.path.join(filePath, os.pardir))
+# replace backslashes with forward slashes
+mainPath = mainPath.replace('\\', '/')
 
 class DateTimeAxisItem(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
@@ -116,7 +118,6 @@ class LogNormalAxis(pg.AxisItem):
             mantissa = mantissa.split('.')[0]
             value = f"{mantissa}x10{exponent}"
             ticks.append(value)
-
         return ticks
         #return ["{:.2e}".format(np.exp(val)) for val in values]
 
@@ -146,8 +147,7 @@ class ScientificAxisItemOg(pg.AxisItem):
         for value in values:
             formatted = "{:.2e}".format(value)
             mantissa, exponent = formatted.split('e')
-            ticks.append("10^{}".format(int(exponent)))
-            
+            ticks.append("10^{}".format(int(exponent))) 
         return ticks
 
 class ScientificAxisItem(pg.AxisItem):
@@ -167,100 +167,20 @@ class ScientificAxisItem(pg.AxisItem):
                 ticks.append("10{}".format(exponent))
             else:
                 ticks.append("")
-
         return ticks
+    
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
         self.grey = (46,53,61)
         self.green = (105,255,0)
-        
-        def dict_to_stylesheet(css_dict):
-            stylesheet = ""
-            for key, value in css_dict.items():
-                stylesheet += f"{key} " + "{" + " ".join([f"{k}: {v};" for k, v in value.items()]) + "}\n"
-            return stylesheet
-    
-        CSS = \
-        {
-            'QWidget':
-            {
-                'background-color': '#333333'
-            },
-            'QCheckBox':
-            {
-                'spacing': '5px',
-                'color': 'white',
-            },
-            # Change font color to white
-            'QLabel':
-            {
-                'color': '#ffffff'
-            },
-            'QCheckBox::indicator':
-            {
-                'width': '30px',
-                'height': '30px',
-                
-            },
-            'QCheckBox::indicator::checked':
-            {
-                'image': 'url(' + mainPath + '/res/images/checkbox_checked_fill_transparent.png)',
-            },
-            'QCheckBox::indicator::unchecked':
-            {
-                'image': 'url(' + mainPath + '/res/images/checkbox_unchecked_fill_transparent.png)',
-            },
-            'QWidget#bordered':
-            {
-                'border': '1px solid #595959'
-            },
-            'QLabel#bordered':
-            {
-                'border': '1px solid #595959',
-                'padding': '10px'
-            },
-            'QLineEdit':
-            {
-                'background-color': 'white',
-                'border-radius': '2px'
-            },
-            # Increase font size of QLineEdit
-            'QLineEdit::indicator':
-            {
-                'width': '30px',
-                'height': '30px',
-            },
-            'QPushButton':
-            {
-                'background-color': '#767171',
-                'color': 'white',
-                'border-radius': '5px'
-            },
-            # Add a hover effect to the button
-            'QPushButton:hover':
-            {
-                'background-color': '#76d13a',
-                'color': 'black',
-                'border-radius': '5px'
-            },
-            'QComboBox':
-            {
-                #'margin-left': '30px',
-                'color': 'white'
-            },
-            'QTextEdit':
-            {
-                'background-color': 'white',
-                'border-radius': '2px'
-            },
 
-        }
-
-        stylesheet = dict_to_stylesheet(CSS)
-        self.setStyleSheet(stylesheet)
-
+        # set stylesheet from file
+        with open(mainPath + "/src/style.css", "r") as file:
+            self.setStyleSheet(file.read())
+        # create stylesheet for setting checkbox images
+        checkbox_stylesheet = "QCheckBox::indicator::checked { image: url(" + mainPath + "/res/images/checkbox_checked_fill_transparent.png); } QCheckBox::indicator::unchecked { image: url(" + mainPath + "/res/images/checkbox_unchecked_fill_transparent.png); }"
 
         self.setWindowTitle("Airmodus PSM Inversion Tool v. " + version_number)
         # resizing the whole app
@@ -430,6 +350,7 @@ class MainWindow(QMainWindow):
         data_filtering_label = QLabel("Raw Data Quality Filtering")
         left_layout.addWidget(data_filtering_label,3,0)
         self.data_filtering_btn = QCheckBox()
+        self.data_filtering_btn.setStyleSheet(checkbox_stylesheet)
         self.data_filtering_btn.setChecked(True)
         self.data_filtering_btn.stateChanged.connect(self.checkbox_button_state_changed)
         left_layout.addWidget(self.data_filtering_btn,3,1)
@@ -437,6 +358,7 @@ class MainWindow(QMainWindow):
         remove_error_data_label = QLabel("Remove Data With Errors")
         left_layout.addWidget(remove_error_data_label,4,0)
         self.remove_error_data_btn = QCheckBox()
+        self.remove_error_data_btn.setStyleSheet(checkbox_stylesheet)
         self.remove_error_data_btn.stateChanged.connect(self.remove_data_with_errors)
         left_layout.addWidget(self.remove_error_data_btn,4,1)
 
@@ -524,6 +446,7 @@ class MainWindow(QMainWindow):
         matlab_time = QHBoxLayout()
         matlab_time_label = QLabel("Matlab time format")
         self.matlab_time_btn = QCheckBox()
+        self.matlab_time_btn.setStyleSheet(checkbox_stylesheet)
         matlab_time.addWidget(matlab_time_label)
         matlab_time.addWidget(self.matlab_time_btn)
         action_layout.addLayout(matlab_time)

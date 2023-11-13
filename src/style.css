@@ -1,0 +1,52 @@
+QWidget {
+    background-color: #333333;
+}
+
+QLabel {
+    color: #ffffff;
+}
+
+QCheckBox::indicator {
+    width: 30px;
+    height: 30px;
+}
+
+QWidget#bordered {
+    border: 1px solid #595959;
+}
+
+QLabel#bordered {
+    border: 1px solid #595959;
+    padding: 10px;
+}
+
+QLineEdit {
+    background-color: white;
+    border-radius: 2px;
+}
+
+QLineEdit::indicator {
+    width: 30px;
+    height: 30px;
+}
+
+QPushButton {
+    background-color: #767171;
+    color: white;
+    border-radius: 5px;
+}
+
+QPushButton:hover {
+    background-color: #76d13a;
+    color: black;
+    border-radius: 5px;
+}
+
+QComboBox {
+    color: white;
+}
+
+QTextEdit {
+    background-color: white;
+    border-radius: 2px;
+}
