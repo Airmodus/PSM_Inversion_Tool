@@ -6,46 +6,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.3.0"
-
-#TODO:
-# GUI: midplotin y-akseli on tällä hetkellä vain binien lukumäärä, kun sen pitäisi olla nanometrejä
-# INV: Pitoisuuskorjaus - 5 parameteri fit to raw data
-# GUI: Colorbaring labelrit
-# GUI: Progress bar inversioon tms. wait cursor kun laskenta on käynnissä
-# GUI: Nappuloiden dynaaminen skaalaus. Eli asetuskentän voi vetää alas, niin että kuvista tulee isompia
-# GUI: Load data file kenttä jää tyhjäksi, jos valinnan peruuttaa ponnahdusikkunasta
-# GUI: Rescale always when new data is loaded
-# GUI: Raw vs. avg plotti toimimaan jo ilman inversiota
-# GUI: Colobarit kuntoon - Saturator flow labeliks ja toiseen dN?
-# quit ei toimi oikein koska aina pitää restartata kerneli ja tulee muutenkin erroria
-# GUI: Lisätään invertoidun datan tallennus
-# INV: Lisätään ebas flägit
-# INV: Lisätään diffuusiohäviöiden laskenta
-# GUI: Lisätään diffuusiohäviöiden input
-# Matalimpien saturaattorivirtausten data ei näy oikein tai poistuvat datasta kokonaan
-# Lisää error handlingiä
-# Kirjasto!!!!
-# Pitäisikö keskiarvoistus tehdä ennen inversiota?
-# Erillinen meta-data tiedosto pitää lisätä: errorit, binien lukumäärä, keskiarvoistuksen määrä, datafilen nimi,
-# calibration filen nimi, päivämäärä ja aika jne
-
-
-# DONE: 
-# Concentration lag on raw plot fix!
-# Skip ok, mut muuten ei lagi yhä paikalla (lagi johtui puolikkaista skanneista (oli esim. 12.5 skanni))
-# Hover green on buttons
-# Selvitä toi skip juttu ja miks tossa on toi n_scannin lagi. 7 kaikkialla?
-# Pitää varmistaa että oikeasti tekee temp filen ja poistaa sen kun softa suljetaan
-# laimennuskerroin korjaus kuntoon
-
-
-# airmodus grey:rgb(118, 113, 113), #767171  
-#background grey:rgb(126, 122, 122), #7e7a7a
-# airmodus green: rgb(118,209,58), #76d13a
-
-#green? rgb( 	118, 209, 58)#76d13a
-#grey? #2E353D
+version_number = "0.3.1"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
