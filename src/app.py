@@ -290,7 +290,12 @@ class MainWindow(QMainWindow):
         self.data_file_label.setObjectName("bordered")
         self.data_file_label.setMaximumWidth(250)
         self.data_file_label.setAlignment(Qt.AlignRight)
-        left_layout.addWidget(self.data_file_label,0,1,1,4)
+        left_layout.addWidget(self.data_file_label,0,1,1,3)
+        self.refresh_file_btn = QPushButton("Refresh File")
+        self.refresh_file_btn.setObjectName("button")
+        self.refresh_file_btn.setFixedWidth(150)
+        self.refresh_file_btn.clicked.connect(self.refresh_file)
+        left_layout.addWidget(self.refresh_file_btn,0,4)
 
         self.load_cal_btn = QPushButton("Load Calibration File")
         self.load_cal_btn.setObjectName("button")
@@ -301,7 +306,7 @@ class MainWindow(QMainWindow):
         self.calibration_file_label.setObjectName("bordered")
         self.calibration_file_label.setMaximumWidth(250)
         self.calibration_file_label.setAlignment(Qt.AlignRight)
-        left_layout.addWidget(self.calibration_file_label,1,1,1,4)
+        left_layout.addWidget(self.calibration_file_label,1,1,1,3)
 
         # adding a space to row 2
         spacer = QSpacerItem(30, 30)
@@ -347,39 +352,28 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.ext_dilution_fac_input,6,1)
 
         self.inversion_method_label = QLabel("Inversion Method")
-        left_layout.addWidget(self.inversion_method_label,3,3)
+        left_layout.addWidget(self.inversion_method_label,3,2)
         self.inversion_method_selection = QComboBox()
         self.inversion_method_selection.setFixedWidth(120)
         self.inversion_method_selection.addItems(["Step Wise"]) # ,"Kernel","EM"
-        left_layout.addWidget(self.inversion_method_selection,3,4)
+        left_layout.addWidget(self.inversion_method_selection,3,3)
 
         bin_label = QLabel("Number of Bins")
-        left_layout.addWidget(bin_label,4,3)
+        left_layout.addWidget(bin_label,4,2)
         self.bin_selection = QComboBox()
         self.bin_selection.setFixedWidth(60)
-        left_layout.addWidget(self.bin_selection,4,4)
+        left_layout.addWidget(self.bin_selection,4,3)
 
         bin_limits_label = QLabel("Bin Limits:")
-        left_layout.addWidget(bin_limits_label,5,3)
+        left_layout.addWidget(bin_limits_label,5,2)
         # label showing bin sizes according to selected amount of bins
         self.bin_limits_text = QLabel()
-        left_layout.addWidget(self.bin_limits_text,6,3,1,3)
+        left_layout.addWidget(self.bin_limits_text,6,2,1,3)
         # connect currentTextChanged signal to show_bin_limits function
         self.bin_selection.currentTextChanged.connect(lambda text: self.show_bin_limits(text))
 
         # set column 5 to stretch, automatically creates space
         left_layout.setColumnStretch(5, 1)
-
-        # # Create checkbox button for polynomial correction
-        # self.polynomial_correction_btn = QCheckBox()
-        # self.polynomial_correction_label = QLabel("Polynomial correction")
-        # left_layout.addWidget(self.polynomial_correction_label,3,3)
-        # left_layout.addWidget(self.polynomial_correction_btn,3,4)
-        # # connect stateChanged signal to reload_data function
-        # self.polynomial_correction_btn.stateChanged.connect(self.reload_data)
-        # # hide the polynomial correction label and checkbox by default
-        # self.polynomial_correction_label.hide()
-        # self.polynomial_correction_btn.hide()
 
         controls_layout.addLayout(left_layout)
         
@@ -782,19 +776,13 @@ class MainWindow(QMainWindow):
             self.CPC_time_lag = -3
             # convert time column data to datetime, PSM2.0 format: YYYY.MM.DD hh:mm:ss
             self.data_df['t'] = pd.to_datetime(self.data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
-            # # # show polynomial correction option
-            # self.polynomial_correction_label.show()
-            # self.polynomial_correction_btn.show()
+
         else:
             self.model = 'A10'
             self.n_len_metadata = 7 # TODO: check if correct, not sure about normal PSM
             self.CPC_time_lag = -3 # Same here, check this number
             # convert time column data to datetime, A10 format: DD.MM.YYYY hh:mm:ss
             self.data_df['t'] = pd.to_datetime(self.data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
-            # # hide polynomial correction option and set state to False
-            # self.polynomial_correction_label.hide()
-            # self.polynomial_correction_btn.hide()
-            # self.polynomial_correction_btn.setChecked(False)
         
         # update bin selection options according to device model
         self.update_bin_selection(self.model)
@@ -805,37 +793,37 @@ class MainWindow(QMainWindow):
         # Apply lag correction to concentration columns (i.e. shift the concentration values up by 4)
         self.data_df['concentration'] = self.data_df['concentration'].shift(self.CPC_time_lag)
 
-        # # if polynomial correction is enabled, apply correction to data
-        # if self.polynomial_correction_btn.isChecked():
-        #     pcor = np.array([-0.0272052, 0.11394213, -0.08959011, -0.20675596, 0.24343024, 1.10531145])
-        #     correction  = np.polyval(pcor, self.data_df['satflow'])
-        #     self.data_df['concentration'] = self.data_df['concentration']/correction
-        #     print("Polynomial correction applied to data")
-
         self.avg_n_input.setText("5")
         self.ext_dilution_fac_input.setText("1")
         self.model_label.setText(f"Instrument Model: {self.model}")
 
-    # refreshes previously loaded data when polynomial correction is enabled/disabled
-    def reload_data(self):
-        # check if a file has been loaded
-        if self.data_df is not None:
-            # check if instrument model is PSM2.0
-            if self.model == 'PSM2.0':
-                self.read_file() # read the file again, apply polynomial correction if enabled
-                self.plot_raw() # plot the data again
+    # refreshes data by reloading current file
+    def refresh_file(self):
+        # read current file name
+        current_filename = self.data_file_label.text()
+        # check if file name is empty
+        if current_filename == "No file selected":
+            self.error_output.append("No file selected")
+        else: # load data with current_filename
+            print("Refreshing file: " + current_filename)
+            self.load_data(current_filename=current_filename)
                   
-    def load_data(self):
-        
-        options = QFileDialog.Option.ReadOnly
-        file_name, _ = QFileDialog.getOpenFileName(self, "Load Data File", "", "dat Files (*.dat);;All Files (*)", options=options)
-        """
-        file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/SMEAR3_psm2.0_20230509.dat"
-        """
-        self.data_file_label.setText(file_name)
-        self.data_file_label.setToolTip(file_name)
+    def load_data(self, **kwargs):
+
+        # if keyword argument 'current_filename' was given, use it
+        if 'current_filename' in kwargs:
+            file_name = kwargs['current_filename']
+        # if no keyword argument was given, open file dialog
+        else:
+            options = QFileDialog.Option.ReadOnly
+            file_name, _ = QFileDialog.getOpenFileName(self, "Load Data File", "", "dat Files (*.dat);;All Files (*)", options=options)
+            """
+            file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/SMEAR3_psm2.0_20230509.dat"
+            """
         if file_name:
             try:
+                self.data_file_label.setText(file_name)
+                self.data_file_label.setToolTip(file_name)
                 # Create a temporary file and copy the contents of the selected file
                 self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
                 shutil.copy(file_name, self.temp_data_file.name)
