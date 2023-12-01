@@ -6,7 +6,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.3.1"
+version_number = "0.4.0"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
