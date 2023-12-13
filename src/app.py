@@ -129,6 +129,72 @@ class ScientificAxisItem(pg.AxisItem):
             else:
                 ticks.append("")
         return ticks
+
+class ExtraFeatures(QWidget):
+    def __init__(self):
+        super().__init__()
+        # create extra features window layout
+        layout = QVBoxLayout()
+
+        # create plot calibration file button
+        self.plot_calibration_file_btn = QPushButton("Plot Calibration File")
+        layout.addWidget(self.plot_calibration_file_btn)
+        # create two scatter plots
+        self.scatter1 = pg.plot()
+        self.scatter1.setBackground('w')
+        self.scatter1.setLabel('left', "Diameter (nm)")
+        self.scatter1.setLabel('bottom', "Onset saturated flow rate")
+        layout.addWidget(self.scatter1)
+        self.scatter2 = pg.plot()
+        self.scatter2.setBackground('w')
+        self.scatter2.setLabel('left', "PSM efficiency at max. sat. flow rate")
+        self.scatter2.setLabel('bottom', "Diameter (nm)")
+        layout.addWidget(self.scatter2)
+
+        # create parameters for custom binning
+        custom_binning_params_layout = QGridLayout()
+        # create custom binning label
+        custom_binning_label = QLabel("Custom Binning")
+        custom_binning_params_layout.addWidget(custom_binning_label, 0, 0, 1, 4)
+        # create inversion button
+        self.inversion_btn = QPushButton("Invert and Plot")
+        custom_binning_params_layout.addWidget(self.inversion_btn, 0, 4, 1, 2)
+        # create min size label
+        min_size_label = QLabel("Min. size (nm)")
+        custom_binning_params_layout.addWidget(min_size_label, 1, 0)
+        # create min size input
+        self.min_size_input = QLineEdit()
+        self.min_size_input.setFixedWidth(50)
+        custom_binning_params_layout.addWidget(self.min_size_input, 1, 1)
+        # create max size label
+        max_size_label = QLabel("Max. size (nm)")
+        custom_binning_params_layout.addWidget(max_size_label, 1, 2)
+        # create max size input
+        self.max_size_input = QLineEdit()
+        self.max_size_input.setFixedWidth(50)
+        custom_binning_params_layout.addWidget(self.max_size_input, 1, 3)
+        # create double validator for min and max size inputs
+        double_validator = QDoubleValidator()
+        double_validator.setLocale(QLocale(QLocale.English, QLocale.UnitedStates))
+        double_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.min_size_input.setValidator(double_validator)
+        self.max_size_input.setValidator(double_validator)
+        # create number of bins label
+        num_bins_label = QLabel("N. of bins")
+        custom_binning_params_layout.addWidget(num_bins_label, 1, 4)
+        # create number of bins input
+        self.num_bins_input = QLineEdit()
+        self.num_bins_input.setFixedWidth(50)
+        self.num_bins_input.setValidator(QIntValidator())
+        custom_binning_params_layout.addWidget(self.num_bins_input, 1, 5)
+        # add custom binning parameters layout to extra features layout
+        layout.addLayout(custom_binning_params_layout)
+
+        # set layout
+        self.setLayout(layout)
+
+        # set window size
+        self.resize(400, 900)
     
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -450,7 +516,20 @@ class MainWindow(QMainWindow):
         self.calibration_df = None
         self.nais_data = None
 
+        self.extra_features = ExtraFeatures()
+        self.extra_features.show()
+        self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
 
+    
+    def custom_inversion(self):
+        # get patameters from extra features window
+        min_size = float(self.extra_features.min_size_input.text())
+        max_size = float(self.extra_features.max_size_input.text())
+        num_bins = int(self.extra_features.num_bins_input.text())
+        # calculate bin limits
+        custom_bin_limits = calculate_bin_limits(min_size, max_size, num_bins)
+        # call invert_and_plot with custom bin limits as kwarg
+        self.invert_and_plot(bin_limits = custom_bin_limits)
 
     def plot_raw(self):
         """
@@ -554,7 +633,7 @@ class MainWindow(QMainWindow):
 
 
 
-    def invert_and_plot(self):
+    def invert_and_plot(self, **kwargs):
 
         if self.inversion_method_selection.currentText() == "Step Wise":
 
@@ -569,8 +648,12 @@ class MainWindow(QMainWindow):
                 # update the measurement data by running it through inst_calib function
                 self.calibration_df, self.data_df  = self.inst_calib()
 
-                # Bin the concentration data, set the number of bins
-                self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data()
+                # if keyword argument 'bin_limits' was given, pass it to bin_data
+                if 'bin_limits' in kwargs:
+                    self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits = kwargs['bin_limits'])
+                else:
+                    # Bin the concentration data, set the number of bins
+                    self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data()
 
                 Sn = self.avg_n_input.text()
                 if Sn == "":
@@ -1203,22 +1286,25 @@ class MainWindow(QMainWindow):
         return self.calibration_df, self.data_df
 
     # Bin the raw data to enable avaraging over scans, and to yield supplementary data for the inversion
-    def bin_data(self):        
+    def bin_data(self, **kwargs):
         # Skip the metadata columns
         skip = self.n_len_metadata
 
-        # get num_bins from bin_selection
-        num_bins = int(self.bin_selection.currentText())
+        # if keyword argument 'bin_limits' was given
+        if 'bin_limits' in kwargs:
+            # use given bin limits
+            fixed_bin_limits = kwargs['bin_limits']
+            # get number of bins
+            num_bins = len(fixed_bin_limits) - 1
+        # if keyword argument was not given
+        else:
+            # get bin limit list from bin_dict using bin_selection value (bin amount) as key
+            fixed_bin_limits = self.bin_dict[self.bin_selection.currentText()]
+            # get num_bins from bin_selection
+            num_bins = int(self.bin_selection.currentText())
+        print("fixed bin limits", fixed_bin_limits)
         self.n = num_bins
 
-        if self.model == 'PSM2.0':
-            maxDp = 12
-        else:
-            maxDp = 4
-
-        # get bin limit list from bin_dict using bin_selection value (bin amount) as key
-        fixed_bin_limits = self.bin_dict[self.bin_selection.currentText()]
-        print("fixed bin limits", fixed_bin_limits)
         # TODO use fixed_bin_limits in calculateBins function
         # calculate bins
         bins = calculateBins(self.calibration_df,fixed_bin_limits) # add 1 to num bins to get the correct number of bins

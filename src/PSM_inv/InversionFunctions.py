@@ -352,6 +352,15 @@ def inst_calib(calibration_df):
     return calibration_df
 
 
+def calculate_bin_limits(min_size, max_size, num_bins):
+    
+    # set number of limits to number of bins + 1
+    num_limits = num_bins + 1
+    # calculate bin limits
+    bin_limits = 10**np.linspace(np.log10(min_size), np.log10(max_size), num_limits)
+
+    return bin_limits
+
 #%%
 
 
