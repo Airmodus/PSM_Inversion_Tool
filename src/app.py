@@ -196,6 +196,21 @@ class ExtraFeatures(QWidget):
         # set window size
         self.resize(400, 900)
     
+    def plot_calibration_file(self, calibration_df):
+        if calibration_df is not None:
+            self.scatter1.clear()
+            self.scatter2.clear()
+            self.scatter1.plot(calibration_df['cal_satflow'], calibration_df['cal_diameter'], pen=None, symbol='o')
+            self.scatter2.plot(calibration_df['cal_diameter'], calibration_df['cal_maxdeteff'], pen=None, symbol='o')
+            # calculate sizecalibration fitting curve and add it to scatter1
+            size_calibration_x, size_calibration_y = calculate_size_fitting(calibration_df['cal_satflow'], calibration_df['cal_diameter'])
+            self.scatter1.plot(size_calibration_x, size_calibration_y, pen='r')
+            # calculate detection efficiency fitting curve and add it to scatter2
+            det_eff_x, det_eff_y = calculate_deteff_fitting(calibration_df['cal_diameter'], calibration_df['cal_maxdeteff'])
+            self.scatter2.plot(det_eff_x, det_eff_y, pen='r')
+        else:
+            print("No calibration file loaded")
+    
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -519,6 +534,7 @@ class MainWindow(QMainWindow):
         self.extra_features = ExtraFeatures()
         self.extra_features.show()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
+        self.extra_features.plot_calibration_file_btn.clicked.connect(lambda: self.extra_features.plot_calibration_file(self.calibration_df))
 
     
     def custom_inversion(self):
@@ -938,19 +954,19 @@ class MainWindow(QMainWindow):
         """
         file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/CF_ALL_ALT.txt"
         """
-        if self.data_df is not None:
-            if file_name:
-                try:
-                    self.calibration_df = pd.read_csv(file_name, delimiter='\t', header=None)
-                    self.calibration_df.columns = ['cal_satflow'] + self.calibration_df.columns[1:].tolist()
-                    self.calibration_df.columns = [self.calibration_df.columns[0], 'cal_diameter'] + self.calibration_df.columns[2:].tolist()
-                    self.calibration_df.columns = self.calibration_df.columns[:2].tolist() + ['cal_maxdeteff'] + self.calibration_df.columns[3:].tolist()
-                    self.calibration_file_label.setText(file_name)
-                    self.calibration_file_label.setToolTip(file_name)
-                except:
-                    self.error_output.append("Error: Calibration file could not be read.")
-        else:
-            self.error_output.append("Choose data file first.")
+        # if self.data_df is not None:
+        if file_name:
+            try:
+                self.calibration_df = pd.read_csv(file_name, delimiter='\t', header=None)
+                self.calibration_df.columns = ['cal_satflow'] + self.calibration_df.columns[1:].tolist()
+                self.calibration_df.columns = [self.calibration_df.columns[0], 'cal_diameter'] + self.calibration_df.columns[2:].tolist()
+                self.calibration_df.columns = self.calibration_df.columns[:2].tolist() + ['cal_maxdeteff'] + self.calibration_df.columns[3:].tolist()
+                self.calibration_file_label.setText(file_name)
+                self.calibration_file_label.setToolTip(file_name)
+            except:
+                self.error_output.append("Error: Calibration file could not be read.")
+        # else:
+        #     self.error_output.append("Choose data file first.")
 
     def update_data(self):
         try:
@@ -1308,7 +1324,7 @@ class MainWindow(QMainWindow):
         # TODO use fixed_bin_limits in calculateBins function
         # calculate bins
         bins = calculateBins(self.calibration_df,fixed_bin_limits) # add 1 to num bins to get the correct number of bins
-        print("bin_lims", bins)
+        print("bin saturator values", bins)
         self.bin_lims = fixed_bin_limits
         self.bin_centers = geom_means(fixed_bin_limits)
 
