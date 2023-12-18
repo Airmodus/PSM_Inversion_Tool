@@ -195,6 +195,9 @@ class ExtraFeatures(QWidget):
 
         # set window size
         self.resize(400, 900)
+
+        # create variable for calibration fitting dataframe
+        self.calibration_fitting_df = None
     
     def plot_calibration_file(self, calibration_df):
         if calibration_df is not None:
@@ -202,12 +205,19 @@ class ExtraFeatures(QWidget):
             self.scatter2.clear()
             self.scatter1.plot(calibration_df['cal_satflow'], calibration_df['cal_diameter'], pen=None, symbol='o')
             self.scatter2.plot(calibration_df['cal_diameter'], calibration_df['cal_maxdeteff'], pen=None, symbol='o')
-            # calculate sizecalibration fitting curve and add it to scatter1
+            # calculate size calibration fitting curve and add it to scatter1
             size_calibration_x, size_calibration_y = calculate_size_fitting(calibration_df['cal_satflow'], calibration_df['cal_diameter'])
             self.scatter1.plot(size_calibration_x, size_calibration_y, pen='r')
+            size_calibration_df = pd.DataFrame({'cal_satflow': size_calibration_x, 'cal_diameter': size_calibration_y})
             # calculate detection efficiency fitting curve and add it to scatter2
-            det_eff_x, det_eff_y = calculate_deteff_fitting(calibration_df['cal_diameter'], calibration_df['cal_maxdeteff'])
+            det_eff_x, det_eff_y = calculate_deteff_fitting(calibration_df['cal_diameter'], calibration_df['cal_maxdeteff'], size_calibration_y)
             self.scatter2.plot(det_eff_x, det_eff_y, pen='r')
+            det_eff_df = pd.DataFrame({'cal_diameter': det_eff_x, 'cal_maxdeteff': det_eff_y})
+            # merge size calibration and detection efficiency dataframes into one dataframe
+            self.calibration_fitting_df = pd.merge(size_calibration_df, det_eff_df, on='cal_diameter')
+            # reverse order of rows in dataframe
+            self.calibration_fitting_df.sort_values(by='cal_diameter', inplace=True, ignore_index=True)
+            #print(self.calibration_fitting_df)
         else:
             print("No calibration file loaded")
     
@@ -1260,8 +1270,11 @@ class MainWindow(QMainWindow):
         # add cal_satflow 0.05 to the cal dataframe
         #cal.loc[len(cal)] = [0.05, 0, 0]
 
+        # if calibration fitting dataframe exists, use it
+        if self.extra_features.calibration_fitting_df is not None:
+            self.calibration_df = self.extra_features.calibration_fitting_df
         # use cal_fit to define the satflow where the diameter is the upper limit of the instrument
-        if self.model == 'PSM2.0':
+        elif self.model == 'PSM2.0':
             maxDp = 12
             satflowlimit = (maxDp - cal_fit[1])/cal_fit[0]
             # limit satflow lower limit to 0.05

@@ -73,7 +73,7 @@ def calculateBins(calibration_df,fixed_bin_limits):
     # print('calculateBins - bin_lims 1: ', bin_lims)
     # calculate geometric mean diameters of bin limits (used in calculating conc at the real bin limits)
     binning_limit = geom_means(fixed_bin_limits)
-    print('calculateBins - binning_limit 1: ', binning_limit)
+    #print('calculateBins - binning_limit 1: ', binning_limit)
     
     # Calculte the smallest and largest size for the diff bins
 #    min_bin_edge = inverse_geom_mean(fixed_bin_limits[0],binning_limit[0])
@@ -86,7 +86,7 @@ def calculateBins(calibration_df,fixed_bin_limits):
     # Append the values to the binning limits
     binning_limit = np.append(binning_limit, max_bin_edge)
     binning_limit = np.append(min_bin_edge, binning_limit)
-    print('calculateBins - binning_limit 2: ', binning_limit)
+    #print('calculateBins - binning_limit 2: ', binning_limit)
 
     # Append the values to the binning limits
     #binning_limit = np.append(fixed_bin_limits, max_bin_edge)
@@ -94,7 +94,7 @@ def calculateBins(calibration_df,fixed_bin_limits):
 
     # Convert to flow ranges
     bin_lims = np.flip(np.interp(binning_limit, calibration_df['cal_diameter'], calibration_df['cal_satflow']))
-    print('calculateBins - bin_lims 2: ', bin_lims)
+    #print('calculateBins - bin_lims 2: ', bin_lims)
 
     return bin_lims
 
@@ -384,7 +384,7 @@ def calculate_size_fitting(qsat, d50):
     return x_new, y_new
 
 # calculate detection efficiency fitting curve
-def calculate_deteff_fitting(d50, det):
+def calculate_deteff_fitting(d50, det, d50fit):
 
     x = d50
     y = det
@@ -392,12 +392,12 @@ def calculate_deteff_fitting(d50, det):
     def de(x, shift=1, scale=1,max_val = 1):
         return (1 / (1 + np.exp(-(x - shift) / scale)))*max_val
 
-    popt0 = np.array([1,0.015,1])
+    popt0 = np.array([1.5,0.015,1])
     popt, _ = curve_fit(de, x, y, popt0)
     # define new input values
-    x_new = np.linspace(0.01, 14, 250)
-    #x_new = 10**np.linspace(np.log10(0.2), np.log10(1.9),50)
-    #x_new = d50fit # TODO what is this?
+    #x_new = np.linspace(0.01, 14, 250)
+    #x_new = 10**np.linspace(np.log10(0.2), np.log10(16),50)
+    x_new = d50fit
     # unpack optima parameters for the objective function
     a0, b0, c0 = popt
     #a0, b0, c0 ,d0 = popt
