@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-# Function for calculating concentration above largest bin
+# Function for calculating concentrations above largest bin
 def concentration_above_bins(scan_start_time, data_df, lowest_bin_limit):
 
     # store columns named 'concentration', 'satflow', 't' from data_df to data_df_copy
@@ -36,3 +36,26 @@ def concentration_above_bins(scan_start_time, data_df, lowest_bin_limit):
 
     #print("\nconcentration values:\n", concentration_values)
     return concentration_values
+
+# Calculate total concentration of each scan
+def total_concentration(save_data, dlogDp_values):
+
+    # create column for storing total concentration values
+    save_data['Total number concentration'] = np.nan
+
+    # go through each row in save_data
+    for row in range(len(save_data)):
+        # reset total_concentration
+        total_concentration = 0
+        # go through each bin column
+        for column in range(1, len(save_data.columns)-2):
+            # if current cell is not nan
+            if not np.isnan(save_data.iloc[row, column]):
+                # calculate total concentration of scan and add to total concentration
+                total_concentration += save_data.iloc[row, column] * dlogDp_values[column-1]
+        # add concentration of second last column
+        total_concentration += save_data.iloc[row, len(save_data.columns)-2]
+        # store total_concentration in last column of current row
+        save_data.iloc[row, len(save_data.columns)-1] = round(total_concentration, 2)
+                
+    return save_data

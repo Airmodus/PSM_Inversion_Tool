@@ -1445,6 +1445,11 @@ class MainWindow(QMainWindow):
             # construct header string and add to list
             dp_headers.append('Bin ' + lower + '-' + upper + ' nm')
         #print(dp_headers)
+        
+        # store dlogDp values in a list
+        dlogDp_values = self.Ninv['dlogDp'].values.tolist()
+        # reverse values to get smallest bin first
+        dlogDp_values = dlogDp_values[::-1]
 
         # transpose the Ninv dataframe to get bins as columns and scans as rows
         save_data = self.Ninv.T
@@ -1478,10 +1483,13 @@ class MainWindow(QMainWindow):
             save_data.insert(0, 'Scan start time', self.scan_start_time)
         
         # calculate concentration values above largest bin
-        larger_concentration = concentration_above_bins(self.scan_start_time, self.data_df, self.lowest_bin_limit)
+        larger_concentrations = concentration_above_bins(self.scan_start_time, self.data_df, self.lowest_bin_limit)
         # add result as column to save_data dataframe
         highest_dp = str(round(self.Ninv['UpperDp'].iloc[0], 2))
-        save_data[('Dp >' + highest_dp + ' nm total number concentration')] = larger_concentration
+        save_data[('Dp >' + highest_dp + ' nm total number concentration')] = larger_concentrations
+
+        # calculate and add total concentration column
+        save_data = total_concentration(save_data, dlogDp_values)
 
         if file_name:
             try:
