@@ -1429,8 +1429,8 @@ class MainWindow(QMainWindow):
         options = QFileDialog.Option.ReadOnly
         # suggest filename if a file is selected
         if self.data_file_label.text() not in ["", "No file selected"]:
-            # get filename, remove file ending (.dat) and add '_dNdlogDp'
-            filename_suggestion = self.data_file_label.text().split(".")[0] + "_dNdlogDp"
+            # get filename, remove '.dat' file ending and add '_dNdlogDp'
+            filename_suggestion = self.data_file_label.text()[:-4] + "_dNdlogDp"
         else: # if no file selected, suggest empty string
             filename_suggestion = ""
         file_name, _ = QFileDialog.getSaveFileName(self, "Save Inverted Data", filename_suggestion, "csv Files (*.csv);;All Files (*)", options=options)
