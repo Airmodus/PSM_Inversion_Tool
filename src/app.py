@@ -6,7 +6,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.4.0"
+version_number = "0.4.1"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
@@ -852,6 +852,7 @@ class MainWindow(QMainWindow):
         
     def load_calibration(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Load Calibration File", "", "Text Files (*.txt);;All Files (*)")
+        self.cal_file_name = file_name
         """
         file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/CF_ALL_ALT.txt"
         """
@@ -869,28 +870,21 @@ class MainWindow(QMainWindow):
         else:
             self.error_output.append("Choose data file first.")
 
-    def update_data(self):
-        try:
-            # Get the number of bins from the QLineEdit
-            num_bins = int(self.bin_selection.currentText())
-
-            # Update the number of bins
-            self.n = num_bins
-
-            # Perform the inversion again with the new number of bins
-            self.step_inversion()
-
-            # Do the averaging again with the new number of bins
-            #self.step_averaging()
-
-            # Update the plots with the new data
-            self.invert_and_plot()
-
-        except ValueError:
-            # Display an error message if the input is not a valid number
-            self.error_output.append("Invalid number of bins. Please enter a valid integer.")
-
-
+    def reload_calibration(self):
+        if self.data_df is not None:
+            file_name = self.cal_file_name
+            if file_name:
+                try:
+                    self.calibration_df = pd.read_csv(file_name, delimiter='\t', header=None)
+                    self.calibration_df.columns = ['cal_satflow'] + self.calibration_df.columns[1:].tolist()
+                    self.calibration_df.columns = [self.calibration_df.columns[0], 'cal_diameter'] + self.calibration_df.columns[2:].tolist()
+                    self.calibration_df.columns = self.calibration_df.columns[:2].tolist() + ['cal_maxdeteff'] + self.calibration_df.columns[3:].tolist()
+                    self.calibration_file_label.setText(file_name)
+                    self.calibration_file_label.setToolTip(file_name)
+                except:
+                    self.error_output.append("Error: Calibration file could not be read.")
+        else:
+            self.error_output.append("Choose data file first.")
 
     def update_plot_title(self):
         """
@@ -1155,6 +1149,8 @@ class MainWindow(QMainWindow):
 
         n_average = 20
 
+        self.reload_calibration()
+
         # make a linear fit of cal_diameter as a function of cal_satflow for the last three values of the dataframe cal
         cal_fit = np.polyfit(self.calibration_df['cal_satflow'][-3:], self.calibration_df['cal_diameter'][-3:], 1)
 
@@ -1210,11 +1206,6 @@ class MainWindow(QMainWindow):
         # get num_bins from bin_selection
         num_bins = int(self.bin_selection.currentText())
         self.n = num_bins
-
-        if self.model == 'PSM2.0':
-            maxDp = 12
-        else:
-            maxDp = 4
 
         # get bin limit list from bin_dict using bin_selection value (bin amount) as key
         fixed_bin_limits = self.bin_dict[self.bin_selection.currentText()]
