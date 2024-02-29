@@ -1,12 +1,10 @@
-
-
 # Import the relevant packages
 from PSM_inv.GuiImports import *
 from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.4.1"
+version_number = "0.5.0"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
@@ -136,9 +134,6 @@ class ExtraFeatures(QWidget):
         # create extra features window layout
         layout = QVBoxLayout()
 
-        # create plot calibration file button
-        self.plot_calibration_file_btn = QPushButton("Plot Calibration File")
-        layout.addWidget(self.plot_calibration_file_btn)
         # create two scatter plots
         self.scatter1 = pg.plot()
         self.scatter1.setBackground('w')
@@ -201,6 +196,11 @@ class ExtraFeatures(QWidget):
     
     def plot_calibration_file(self, calibration_df):
         if calibration_df is not None:
+            
+            # if extra features window is not visible, show it
+            if not self.isVisible():
+                self.show()
+            
             self.scatter1.clear()
             self.scatter2.clear()
             self.scatter1.plot(calibration_df['cal_satflow'], calibration_df['cal_diameter'], pen=None, symbol='o')
@@ -468,26 +468,24 @@ class MainWindow(QMainWindow):
 
         controls_layout.addLayout(left_layout)
         
-        # main_layout/controls_layout/right_layout/action_layout
+        # main_layout/controls_layout/right_layout
         right_layout = QGridLayout()
 
         self.error_output = QTextEdit()
         self.error_output.setReadOnly(True)
-        right_layout.addWidget(self.error_output,0,0,1,2)
-
-        action_layout = QVBoxLayout()
+        right_layout.addWidget(self.error_output,0,0,1,3)
 
         self.invert_and_plot_btn = QPushButton("Invert and Plot")
         self.invert_and_plot_btn.setObjectName("button")
         self.invert_and_plot_btn.setFixedWidth(150)
         self.invert_and_plot_btn.clicked.connect(self.invert_and_plot)
-        action_layout.addWidget(self.invert_and_plot_btn)
+        right_layout.addWidget(self.invert_and_plot_btn, 1, 0)
 
         self.save_button = QPushButton("Save")
         self.save_button.setFixedWidth(150)
         self.save_button.setObjectName("button")
         self.save_button.clicked.connect(self.save_settings)
-        action_layout.addWidget(self.save_button)
+        right_layout.addWidget(self.save_button, 2, 0)
 
         matlab_time = QHBoxLayout()
         matlab_time_label = QLabel("Matlab time format")
@@ -495,29 +493,26 @@ class MainWindow(QMainWindow):
         self.matlab_time_btn.setStyleSheet(checkbox_stylesheet)
         matlab_time.addWidget(matlab_time_label)
         matlab_time.addWidget(self.matlab_time_btn)
-        action_layout.addLayout(matlab_time)
+        right_layout.addLayout(matlab_time, 3, 0)
 
-        right_layout.addLayout(action_layout,1,0)
+        # add spacer item between columns
+        right_layout.addItem(QSpacerItem(0, 0), 1, 1)
 
         # create widgets for NAIS data loading
-        nais_data_layout = QVBoxLayout()
         self.nais_data_label = QLabel("No NAIS data file selected")
         self.nais_data_label.setObjectName("bordered")
         self.nais_data_label.setMaximumWidth(300)
         self.nais_data_label.setAlignment(Qt.AlignRight)
-        nais_data_layout.addWidget(self.nais_data_label)
+        right_layout.addWidget(self.nais_data_label, 1, 2)
         self.nais_data_btn = QPushButton("Load NAIS data")
         self.nais_data_btn.setObjectName("button")
         self.nais_data_btn.setMaximumWidth(300)
         self.nais_data_btn.clicked.connect(self.load_nais_data)
-        nais_data_layout.addWidget(self.nais_data_btn)
-        # add spacing
-        nais_data_layout.addSpacing(80)
-        # add nais_data_layout to right_layout
-        right_layout.addLayout(nais_data_layout,1,1)
+        right_layout.addWidget(self.nais_data_btn, 2, 2)
 
-        # adding a spacer item to right side corresponding to QGridLayout on the left
-        right_layout.addItem(QSpacerItem(0,0,1,1),1,1)
+        # create plot calibration file button
+        self.plot_calibration_file_btn = QPushButton("Plot Calibration File")
+        right_layout.addWidget(self.plot_calibration_file_btn, 3, 2)
 
         controls_layout.addLayout(right_layout)
         controls_layout.setStretchFactor(left_layout, 1)
@@ -542,9 +537,8 @@ class MainWindow(QMainWindow):
         self.nais_data = None
 
         self.extra_features = ExtraFeatures()
-        self.extra_features.show()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
-        self.extra_features.plot_calibration_file_btn.clicked.connect(lambda: self.extra_features.plot_calibration_file(self.calibration_df))
+        self.plot_calibration_file_btn.clicked.connect(lambda: self.extra_features.plot_calibration_file(self.calibration_df))
 
     
     def custom_inversion(self):
