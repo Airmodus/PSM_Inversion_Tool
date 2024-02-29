@@ -5,6 +5,7 @@ skip = 7
 n_average = 20
 import pandas as pd 
 import numpy as np
+from scipy.optimize import curve_fit
 
 
 class InversionError(Exception):
@@ -68,9 +69,11 @@ def inverse_geom_mean(GMD,lim1):
 
 def calculateBins(calibration_df,fixed_bin_limits):
     # Interpolate the bin limits based on the calibration data on points requested by diam_bins
-    bin_lims = np.flip(np.interp(fixed_bin_limits, calibration_df['cal_diameter'], calibration_df['cal_satflow']))
+    # bin_lims = np.flip(np.interp(fixed_bin_limits, calibration_df['cal_diameter'], calibration_df['cal_satflow']))
+    # print('calculateBins - bin_lims 1: ', bin_lims)
     # calculate geometric mean diameters of bin limits (used in calculating conc at the real bin limits)
     binning_limit = geom_means(fixed_bin_limits)
+    #print('calculateBins - binning_limit 1: ', binning_limit)
     
     # Calculte the smallest and largest size for the diff bins
 #    min_bin_edge = inverse_geom_mean(fixed_bin_limits[0],binning_limit[0])
@@ -83,6 +86,7 @@ def calculateBins(calibration_df,fixed_bin_limits):
     # Append the values to the binning limits
     binning_limit = np.append(binning_limit, max_bin_edge)
     binning_limit = np.append(min_bin_edge, binning_limit)
+    #print('calculateBins - binning_limit 2: ', binning_limit)
 
     # Append the values to the binning limits
     #binning_limit = np.append(fixed_bin_limits, max_bin_edge)
@@ -90,10 +94,7 @@ def calculateBins(calibration_df,fixed_bin_limits):
 
     # Convert to flow ranges
     bin_lims = np.flip(np.interp(binning_limit, calibration_df['cal_diameter'], calibration_df['cal_satflow']))
-
-
-
-
+    #print('calculateBins - bin_lims 2: ', bin_lims)
 
     return bin_lims
 
@@ -351,6 +352,59 @@ def inst_calib(calibration_df):
 
     return calibration_df
 
+
+def calculate_bin_limits(min_size, max_size, num_bins):
+    
+    # set number of limits to number of bins + 1
+    num_limits = num_bins + 1
+    # calculate bin limits
+    bin_limits = 10**np.linspace(np.log10(min_size), np.log10(max_size), num_limits)
+    print('bin_limits:', bin_limits)
+
+    return bin_limits
+
+# calculate size calibration fitting curve
+def calculate_size_fitting(qsat, d50):
+
+    x = qsat
+    y = d50
+
+    def se(x,a = 3.5,b=2.5,c = .5,d = 10):
+        return x/(x-a)+b + x/((x+c)**d)
+
+    popt0 = np.array([3.5,2.5,.5,10])
+    popt, _ = curve_fit(se, x, y,popt0)
+    # define new input values
+    x_new = 10**np.linspace(np.log10(0.1), np.log10(2.0),50)
+    # unpack optima parameters for the objective function
+    a,b,c,d = popt
+    # use optimal parameters to calculate new values
+    y_new = se(x_new,*popt)
+
+    return x_new, y_new
+
+# calculate detection efficiency fitting curve
+def calculate_deteff_fitting(d50, det, d50fit):
+
+    x = d50
+    y = det
+
+    def de(x, shift=1, scale=1,max_val = 1):
+        return (1 / (1 + np.exp(-(x - shift) / scale)))*max_val
+
+    popt0 = np.array([1.5,0.015,1])
+    popt, _ = curve_fit(de, x, y, popt0)
+    # define new input values
+    #x_new = np.linspace(0.01, 14, 250)
+    #x_new = 10**np.linspace(np.log10(0.2), np.log10(16),50)
+    x_new = d50fit
+    # unpack optima parameters for the objective function
+    a0, b0, c0 = popt
+    #a0, b0, c0 ,d0 = popt
+    # use optimal parameters to calculate new values
+    y_new = de(x_new,*popt)
+
+    return x_new, y_new
 
 #%%
 

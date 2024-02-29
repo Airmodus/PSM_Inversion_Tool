@@ -129,6 +129,97 @@ class ScientificAxisItem(pg.AxisItem):
             else:
                 ticks.append("")
         return ticks
+
+class ExtraFeatures(QWidget):
+    def __init__(self):
+        super().__init__()
+        # create extra features window layout
+        layout = QVBoxLayout()
+
+        # create plot calibration file button
+        self.plot_calibration_file_btn = QPushButton("Plot Calibration File")
+        layout.addWidget(self.plot_calibration_file_btn)
+        # create two scatter plots
+        self.scatter1 = pg.plot()
+        self.scatter1.setBackground('w')
+        self.scatter1.setLabel('left', "Diameter (nm)")
+        self.scatter1.setLabel('bottom', "Onset saturated flow rate")
+        layout.addWidget(self.scatter1)
+        self.scatter2 = pg.plot()
+        self.scatter2.setBackground('w')
+        self.scatter2.setLabel('left', "PSM efficiency at max. sat. flow rate")
+        self.scatter2.setLabel('bottom', "Diameter (nm)")
+        layout.addWidget(self.scatter2)
+
+        # create parameters for custom binning
+        custom_binning_params_layout = QGridLayout()
+        # create custom binning label
+        custom_binning_label = QLabel("Custom Binning")
+        custom_binning_params_layout.addWidget(custom_binning_label, 0, 0, 1, 4)
+        # create inversion button
+        self.inversion_btn = QPushButton("Invert and Plot")
+        custom_binning_params_layout.addWidget(self.inversion_btn, 0, 4, 1, 2)
+        # create min size label
+        min_size_label = QLabel("Min. size (nm)")
+        custom_binning_params_layout.addWidget(min_size_label, 1, 0)
+        # create min size input
+        self.min_size_input = QLineEdit()
+        self.min_size_input.setFixedWidth(50)
+        custom_binning_params_layout.addWidget(self.min_size_input, 1, 1)
+        # create max size label
+        max_size_label = QLabel("Max. size (nm)")
+        custom_binning_params_layout.addWidget(max_size_label, 1, 2)
+        # create max size input
+        self.max_size_input = QLineEdit()
+        self.max_size_input.setFixedWidth(50)
+        custom_binning_params_layout.addWidget(self.max_size_input, 1, 3)
+        # create double validator for min and max size inputs
+        double_validator = QDoubleValidator()
+        double_validator.setLocale(QLocale(QLocale.English, QLocale.UnitedStates))
+        double_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.min_size_input.setValidator(double_validator)
+        self.max_size_input.setValidator(double_validator)
+        # create number of bins label
+        num_bins_label = QLabel("N. of bins")
+        custom_binning_params_layout.addWidget(num_bins_label, 1, 4)
+        # create number of bins input
+        self.num_bins_input = QLineEdit()
+        self.num_bins_input.setFixedWidth(50)
+        self.num_bins_input.setValidator(QIntValidator())
+        custom_binning_params_layout.addWidget(self.num_bins_input, 1, 5)
+        # add custom binning parameters layout to extra features layout
+        layout.addLayout(custom_binning_params_layout)
+
+        # set layout
+        self.setLayout(layout)
+
+        # set window size
+        self.resize(400, 900)
+
+        # create variable for calibration fitting dataframe
+        self.calibration_fitting_df = None
+    
+    def plot_calibration_file(self, calibration_df):
+        if calibration_df is not None:
+            self.scatter1.clear()
+            self.scatter2.clear()
+            self.scatter1.plot(calibration_df['cal_satflow'], calibration_df['cal_diameter'], pen=None, symbol='o')
+            self.scatter2.plot(calibration_df['cal_diameter'], calibration_df['cal_maxdeteff'], pen=None, symbol='o')
+            # calculate size calibration fitting curve and add it to scatter1
+            size_calibration_x, size_calibration_y = calculate_size_fitting(calibration_df['cal_satflow'], calibration_df['cal_diameter'])
+            self.scatter1.plot(size_calibration_x, size_calibration_y, pen='r')
+            size_calibration_df = pd.DataFrame({'cal_satflow': size_calibration_x, 'cal_diameter': size_calibration_y})
+            # calculate detection efficiency fitting curve and add it to scatter2
+            det_eff_x, det_eff_y = calculate_deteff_fitting(calibration_df['cal_diameter'], calibration_df['cal_maxdeteff'], size_calibration_y)
+            self.scatter2.plot(det_eff_x, det_eff_y, pen='r')
+            det_eff_df = pd.DataFrame({'cal_diameter': det_eff_x, 'cal_maxdeteff': det_eff_y})
+            # merge size calibration and detection efficiency dataframes into one dataframe
+            self.calibration_fitting_df = pd.merge(size_calibration_df, det_eff_df, on='cal_diameter')
+            # reverse order of rows in dataframe
+            self.calibration_fitting_df.sort_values(by='cal_diameter', inplace=True, ignore_index=True)
+            #print(self.calibration_fitting_df)
+        else:
+            print("No calibration file loaded")
     
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -450,7 +541,21 @@ class MainWindow(QMainWindow):
         self.calibration_df = None
         self.nais_data = None
 
+        self.extra_features = ExtraFeatures()
+        self.extra_features.show()
+        self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
+        self.extra_features.plot_calibration_file_btn.clicked.connect(lambda: self.extra_features.plot_calibration_file(self.calibration_df))
 
+    
+    def custom_inversion(self):
+        # get patameters from extra features window
+        min_size = float(self.extra_features.min_size_input.text())
+        max_size = float(self.extra_features.max_size_input.text())
+        num_bins = int(self.extra_features.num_bins_input.text())
+        # calculate bin limits
+        custom_bin_limits = calculate_bin_limits(min_size, max_size, num_bins)
+        # call invert_and_plot with custom bin limits as kwarg
+        self.invert_and_plot(bin_limits = custom_bin_limits)
 
     def plot_raw(self):
         """
@@ -554,7 +659,7 @@ class MainWindow(QMainWindow):
 
 
 
-    def invert_and_plot(self):
+    def invert_and_plot(self, **kwargs):
 
         if self.inversion_method_selection.currentText() == "Step Wise":
 
@@ -569,8 +674,12 @@ class MainWindow(QMainWindow):
                 # update the measurement data by running it through inst_calib function
                 self.calibration_df, self.data_df  = self.inst_calib()
 
-                # Bin the concentration data, set the number of bins
-                self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data()
+                # if keyword argument 'bin_limits' was given, pass it to bin_data
+                if 'bin_limits' in kwargs:
+                    self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits = kwargs['bin_limits'])
+                else:
+                    # Bin the concentration data, set the number of bins
+                    self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data()
 
                 Sn = self.avg_n_input.text()
                 if Sn == "":
@@ -856,19 +965,19 @@ class MainWindow(QMainWindow):
         """
         file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/CF_ALL_ALT.txt"
         """
-        if self.data_df is not None:
-            if file_name:
-                try:
-                    self.calibration_df = pd.read_csv(file_name, delimiter='\t', header=None)
-                    self.calibration_df.columns = ['cal_satflow'] + self.calibration_df.columns[1:].tolist()
-                    self.calibration_df.columns = [self.calibration_df.columns[0], 'cal_diameter'] + self.calibration_df.columns[2:].tolist()
-                    self.calibration_df.columns = self.calibration_df.columns[:2].tolist() + ['cal_maxdeteff'] + self.calibration_df.columns[3:].tolist()
-                    self.calibration_file_label.setText(file_name)
-                    self.calibration_file_label.setToolTip(file_name)
-                except:
-                    self.error_output.append("Error: Calibration file could not be read.")
-        else:
-            self.error_output.append("Choose data file first.")
+        # if self.data_df is not None:
+        if file_name:
+            try:
+                self.calibration_df = pd.read_csv(file_name, delimiter='\t', header=None)
+                self.calibration_df.columns = ['cal_satflow'] + self.calibration_df.columns[1:].tolist()
+                self.calibration_df.columns = [self.calibration_df.columns[0], 'cal_diameter'] + self.calibration_df.columns[2:].tolist()
+                self.calibration_df.columns = self.calibration_df.columns[:2].tolist() + ['cal_maxdeteff'] + self.calibration_df.columns[3:].tolist()
+                self.calibration_file_label.setText(file_name)
+                self.calibration_file_label.setToolTip(file_name)
+            except:
+                self.error_output.append("Error: Calibration file could not be read.")
+        # else:
+        #     self.error_output.append("Choose data file first.")
 
     def reload_calibration(self):
         if self.data_df is not None:
@@ -1157,8 +1266,11 @@ class MainWindow(QMainWindow):
         # add cal_satflow 0.05 to the cal dataframe
         #cal.loc[len(cal)] = [0.05, 0, 0]
 
+        # if calibration fitting dataframe exists, use it
+        if self.extra_features.calibration_fitting_df is not None:
+            self.calibration_df = self.extra_features.calibration_fitting_df
         # use cal_fit to define the satflow where the diameter is the upper limit of the instrument
-        if self.model == 'PSM2.0':
+        elif self.model == 'PSM2.0':
             maxDp = 12
             satflowlimit = (maxDp - cal_fit[1])/cal_fit[0]
             # limit satflow lower limit to 0.05
@@ -1199,21 +1311,29 @@ class MainWindow(QMainWindow):
         return self.calibration_df, self.data_df
 
     # Bin the raw data to enable avaraging over scans, and to yield supplementary data for the inversion
-    def bin_data(self):        
+    def bin_data(self, **kwargs):
         # Skip the metadata columns
         skip = self.n_len_metadata
 
-        # get num_bins from bin_selection
-        num_bins = int(self.bin_selection.currentText())
+        # if keyword argument 'bin_limits' was given
+        if 'bin_limits' in kwargs:
+            # use given bin limits
+            fixed_bin_limits = kwargs['bin_limits']
+            # get number of bins
+            num_bins = len(fixed_bin_limits) - 1
+        # if keyword argument was not given
+        else:
+            # get bin limit list from bin_dict using bin_selection value (bin amount) as key
+            fixed_bin_limits = self.bin_dict[self.bin_selection.currentText()]
+            # get num_bins from bin_selection
+            num_bins = int(self.bin_selection.currentText())
+        print("fixed bin limits", fixed_bin_limits)
         self.n = num_bins
 
-        # get bin limit list from bin_dict using bin_selection value (bin amount) as key
-        fixed_bin_limits = self.bin_dict[self.bin_selection.currentText()]
-        print("fixed bin limits", fixed_bin_limits)
         # TODO use fixed_bin_limits in calculateBins function
         # calculate bins
         bins = calculateBins(self.calibration_df,fixed_bin_limits) # add 1 to num bins to get the correct number of bins
-        print("bin_lims", bins)
+        print("bin saturator values", bins)
         self.bin_lims = fixed_bin_limits
         self.bin_centers = geom_means(fixed_bin_limits)
 
