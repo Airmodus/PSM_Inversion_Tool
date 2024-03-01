@@ -150,7 +150,13 @@ class ExtraFeatures(QWidget):
         custom_binning_params_layout = QGridLayout()
         # create custom binning label
         custom_binning_label = QLabel("Custom Binning")
-        custom_binning_params_layout.addWidget(custom_binning_label, 0, 0, 1, 4)
+        custom_binning_params_layout.addWidget(custom_binning_label, 0, 0, 1, 2)
+        # create calibration fit label
+        calibration_fit_label = QLabel("Use calibration fit")
+        custom_binning_params_layout.addWidget(calibration_fit_label, 0, 2)
+        # create calibration fit checkbox
+        self.calibration_fit_checkbox = QCheckBox()
+        custom_binning_params_layout.addWidget(self.calibration_fit_checkbox, 0, 3)
         # create inversion button
         self.inversion_btn = QPushButton("Invert and Plot")
         custom_binning_params_layout.addWidget(self.inversion_btn, 0, 4, 1, 2)
@@ -194,8 +200,14 @@ class ExtraFeatures(QWidget):
         # create variable for calibration fitting dataframe
         self.calibration_fitting_df = None
     
-    def plot_calibration_file(self, calibration_df):
-        if calibration_df is not None:
+    def plot_calibration_file(self, main_window):
+        # if calibration dataframe exists
+        if main_window.calibration_df is not None:
+
+            # reload calibration file
+            main_window.reload_calibration()
+            # get calibration dataframe from main window
+            calibration_df = main_window.calibration_df
             
             # if extra features window is not visible, show it
             if not self.isVisible():
@@ -538,7 +550,8 @@ class MainWindow(QMainWindow):
 
         self.extra_features = ExtraFeatures()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
-        self.plot_calibration_file_btn.clicked.connect(lambda: self.extra_features.plot_calibration_file(self.calibration_df))
+        # connect "Plot calibration file" to plot_calibration_file function with reference to this window
+        self.plot_calibration_file_btn.clicked.connect(lambda: self.extra_features.plot_calibration_file(self))
 
     
     def custom_inversion(self):
@@ -1260,8 +1273,11 @@ class MainWindow(QMainWindow):
         # add cal_satflow 0.05 to the cal dataframe
         #cal.loc[len(cal)] = [0.05, 0, 0]
 
-        # if calibration fitting dataframe exists, use it
-        if self.extra_features.calibration_fitting_df is not None:
+        # check if calibration fit is enabled in extra features window
+        if self.extra_features.calibration_fit_checkbox.isChecked():
+            # plot calibration file to refresh the fitting dataframe
+            self.extra_features.plot_calibration_file(self)
+            # use the fitting dataframe in place of the calibration dataframe
             self.calibration_df = self.extra_features.calibration_fitting_df
         # use cal_fit to define the satflow where the diameter is the upper limit of the instrument
         elif self.model == 'PSM2.0':
