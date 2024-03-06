@@ -1514,26 +1514,31 @@ class MainWindow(QMainWindow):
         self.bin_selection.clear()
         # define bin amounts and limits: key = number of bins, value = list of bin limits
         if model == 'PSM2.0':
-            self.bin_dict = { # TODO define actual bin limits
-                "4":[1.19, 1.5, 2.5, 5, 12],
-                "6":[1.19, 1.5, 1.7, 2.5, 5, 8, 12],
-                "8":[1.19, 1.3, 1.5, 1.7, 2.5, 3, 5, 8, 12],
-                "10":[1.19, 1.3, 1.5, 1.7, 2.5, 3, 4, 5, 8, 10, 12],
-                "12":[1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 4, 5, 8, 10, 12],
-                "14":[1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, 12],
+            self.bin_dict = {
+                "4":[1.15, 1.5, 2.5, 5, 12],
+                "6":[1.15, 1.5, 1.7, 2.5, 5, 8, 12],
+                "8":[1.15, 1.3, 1.5, 1.7, 2.5, 3, 5, 8, 12],
+                "10":[1.15, 1.3, 1.5, 1.7, 2.5, 3, 4, 5, 8, 10, 12],
+                "12":[1.15, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 4, 5, 8, 10, 12],
+                "14":[1.15, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, 12],
+                "17":[1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, 12],
+                "21":[1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5, 1.6, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, 12],
                 }
+            default_value = "14"
         elif model == 'A10':
-            self.bin_dict = { # TODO define actual bin limits
-                "4":[1.19, 1.5, 1.7, 2.5, 4],
-                "6":[1.19, 1.3, 1.5, 1.7, 2.5, 3, 4]
+            self.bin_dict = {
+                "4":[1.15, 1.5, 1.7, 2.5, 4],
+                "6":[1.15, 1.3, 1.5, 1.7, 2.5, 3, 4],
+                "7":[1.15, 1.2, 1.3, 1.5, 1.7, 2.5, 3, 4]
                 }
+            default_value = "6"
         # add bin amounts to bin_selection
         bin_amounts = []
         for i in self.bin_dict.keys():
             bin_amounts.append(i)
         self.bin_selection.addItems(bin_amounts)
-        # set defalt value to last item in bin_selection
-        self.bin_selection.setCurrentText(bin_amounts[-1])
+        # set defalt value to bin_selection
+        self.bin_selection.setCurrentText(default_value)
 
     # show bin limits of selected bin amount in GUI
     def show_bin_limits(self, bin_amount):
