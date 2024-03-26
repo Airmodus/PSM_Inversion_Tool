@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.5.0"
+version_number = "0.5.1"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
@@ -882,7 +882,16 @@ class MainWindow(QMainWindow):
     def read_file(self):
         # Read the temporary file into a DataFrame and rename relevant columns
         self.data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', skiprows=1, header=None)
-        self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution'}, inplace=True)
+        # get number of columns and rename columns according to device model
+        n_cols = len(self.data_df.columns)
+        if n_cols == 32: # PSM Retrofit (old data without Critical orifice P)
+            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 29: 'CPC_system_status_error', 31: 'PSM_system_status_error'}, inplace=True)
+        elif n_cols == 33: # PSM Retrofit
+            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 18: 'dilution', 30: 'CPC_system_status_error', 32: 'PSM_system_status_error'}, inplace=True)
+        elif n_cols == 34: # PSM2.0
+            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 19: 'dilution', 31: 'CPC_system_status_error', 33: 'PSM_system_status_error'}, inplace=True)
+        elif n_cols == 47: # A10
+            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 44: 'CPC_system_status_error', 46: 'PSM_system_status_error'}, inplace=True)
 
         # Check if the data is from PSM2.0 or A10
         # and set default falues to input fields
@@ -1159,13 +1168,6 @@ class MainWindow(QMainWindow):
             self.plot_raw()
 
     def check_instrument_errors(self, df):
-        # check instrument model and assign correct column numbers
-        if self.model == 'PSM2.0':
-            df['PSM_system_status_error'] = df.iloc[:,31]
-            df['CPC_system_status_error'] = df.iloc[:,29]
-        else: # A10
-            df['PSM_system_status_error'] = df.iloc[:,46]
-            df['CPC_system_status_error'] = df.iloc[:,44]
 
         # convert the system status hex to row of binary and handle missing values
         df['PSM_system_status_error'].fillna('0x0000', inplace=True)
