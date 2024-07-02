@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.5.1"
+version_number = "0.5.2"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
@@ -1309,10 +1309,11 @@ class MainWindow(QMainWindow):
         # Force the times when average flow over 20 s is zero to upscan (or downscan)
         satflow_diff[satflow_diff == 0] = -0.01
 
-        nan_filler = np.zeros(int(n_average/2))
+        # +4 to account for the moving average start and stop
+        nan_filler = np.zeros(int((n_average+4)/2))
         nan_filler[:] = np.nan
 
-        self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(satflow_diff)), nan_filler)
+        self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
 
         # Add scan number from the point of changing scans
         self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))

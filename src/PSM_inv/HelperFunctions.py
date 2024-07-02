@@ -36,3 +36,8 @@ def concentration_above_bins(scan_start_time, data_df, lowest_bin_limit):
 
     #print("\nconcentration values:\n", concentration_values)
     return concentration_values
+
+def moving_average(a, n=3):
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
