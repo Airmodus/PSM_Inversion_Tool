@@ -880,32 +880,35 @@ class MainWindow(QMainWindow):
         self.update_plot()
     
     def read_file(self):
-        # Read the temporary file into a DataFrame and rename relevant columns
-        self.data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', skiprows=1, header=None)
-        # get number of columns and rename columns according to device model
-        n_cols = len(self.data_df.columns)
-        if n_cols == 32: # PSM Retrofit (old data without Critical orifice P)
-            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 29: 'CPC_system_status_error', 31: 'PSM_system_status_error'}, inplace=True)
-        elif n_cols == 33: # PSM Retrofit
-            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 18: 'dilution', 30: 'CPC_system_status_error', 32: 'PSM_system_status_error'}, inplace=True)
-        elif n_cols == 34: # PSM2.0
-            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 19: 'dilution', 31: 'CPC_system_status_error', 33: 'PSM_system_status_error'}, inplace=True)
-        elif n_cols == 47: # A10
-            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 44: 'CPC_system_status_error', 46: 'PSM_system_status_error'}, inplace=True)
+        # determine device model by checking if "YYYY.MM.DD hh:mm:ss" is in file header
+        with open(self.temp_data_file.name, 'r') as file:
+            # check if "YYYY.MM.DD hh:mm:ss" is in the first line of the file
+            if "YYYY.MM.DD hh:mm:ss" in file.readline(): # PSM 2.0 / Retrofit
+                print("2.0 / Retrofit")
+                # set parameters according to PSM 2.0
+                self.model = 'PSM2.0'
+                self.n_len_metadata = 7
+                self.CPC_time_lag = -3
+            else: # A10
+                print("A10")
+                # set parameters according to A10
+                self.model = 'A10'
+                self.n_len_metadata = 7 # TODO: check if correct, not sure about normal PSM
+                self.CPC_time_lag = -3 # Same here, check this number
 
-        # Check if the data is from PSM2.0 or A10
-        # and set default falues to input fields
-        if self.data_df['satflow'].max() > 1.4:
-            self.model = 'PSM2.0'
-            self.n_len_metadata = 7
-            self.CPC_time_lag = -3
+        # Read the temporary file into a DataFrame and rename relevant columns
+        if self.model == 'PSM2.0':
+            # include header if device is PSM 2.0
+            self.data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', header=0) # skiprows=1, header=None)
+            # rename columns by old names
+            self.data_df.rename(columns={"Concentration from PSM (1/cm3)": "concentration", "Saturator flow rate (lpm)": "satflow", "Dilution correction factor": "dilution", "CPC system status errors (hex)": "CPC_system_status_error", "PSM system status errors (hex)": "PSM_system_status_error"}, inplace=True)
             # convert time column data to datetime, PSM2.0 format: YYYY.MM.DD hh:mm:ss
             self.data_df['t'] = pd.to_datetime(self.data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
-
-        else:
-            self.model = 'A10'
-            self.n_len_metadata = 7 # TODO: check if correct, not sure about normal PSM
-            self.CPC_time_lag = -3 # Same here, check this number
+        elif self.model == 'A10':
+            # skip header if device is A10
+            self.data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', skiprows=1, header=None)
+            # rename columns by index
+            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 44: 'CPC_system_status_error', 46: 'PSM_system_status_error'}, inplace=True)
             # convert time column data to datetime, A10 format: DD.MM.YYYY hh:mm:ss
             self.data_df['t'] = pd.to_datetime(self.data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
         
