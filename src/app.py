@@ -582,7 +582,8 @@ class MainWindow(QMainWindow):
             # Convert Timestamp objects to POSIX timestamps
             self.posix_timestamps = self.data_df['t'].apply(lambda x: x.timestamp())
 
-            concentration_values = self.data_df['concentration']
+            # concentration_values = self.data_df['concentration']
+            concentration_values = self.data_df['detrended_concentration']
             satflow_values = self.data_df['satflow']
 
 
@@ -679,7 +680,7 @@ class MainWindow(QMainWindow):
                 # Inversion --------------------------------------------------------
 
                 # update the measurement data by running it through inst_calib function
-                self.calibration_df, self.data_df  = self.inst_calib()
+                self.calibration_df  = self.inst_calib()
 
                 # if keyword argument 'bin_limits' was given, pass it to bin_data
                 if 'bin_limits' in kwargs:
@@ -909,6 +910,7 @@ class MainWindow(QMainWindow):
             # convert time column data to datetime, A10 format: DD.MM.YYYY hh:mm:ss
             self.data_df['t'] = pd.to_datetime(self.data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
         
+        
         # update bin selection options according to device model
         self.update_bin_selection(self.model)
 
@@ -918,6 +920,77 @@ class MainWindow(QMainWindow):
         # Apply lag correction to concentration columns (i.e. shift the concentration values up by 4)
         self.data_df['concentration'] = self.data_df['concentration'].shift(self.CPC_time_lag)
 
+        # TODO: Bring changes here
+        n_average = 20
+
+        # find satlow up and down transitions and average satflow_diff over 20s
+        satflow_diff = np.convolve(np.diff(self.data_df['satflow']), np.ones((n_average,))/n_average, mode='valid')
+
+        # Force the times when average flow over 20 s is zero  or nan to upscan (or downscan)
+        satflow_diff[np.isnan(satflow_diff)] = -0.01
+        satflow_diff[satflow_diff == 0] = -0.01
+
+        # +4 to account for the moving average start and stop
+        nan_filler = np.zeros(int((n_average+4)/2))
+        nan_filler[:] = np.nan
+
+        self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
+
+        # Add scan number from the point of changing scans
+        self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
+
+        # filter satflow 0 out of the data
+        self.data_df = self.data_df[self.data_df['satflow'] != 0]
+        
+        # Make sure that NaNs the are not present in the time data
+        self.data_df.dropna(subset = 't', inplace = True)
+        
+
+        #####
+
+        # Identify change indexes for 'up_scan'
+        shifted_up_scan = self.data_df['up_scan'].shift(1)
+        change_indexes = self.data_df[(self.data_df['up_scan'] == 1) & (shifted_up_scan == -1)].index.tolist()
+
+        # Append start and end indices to cover all data
+        #change_indexes = [0] + change_indexes + [len(self.data_df) - 1]
+        
+        # Create a new column to store detrended data
+        self.data_df['detrended_concentration'] = np.nan
+
+        # Calculate averages of the next 10 points (or up to the end) for each change index
+        averages = []
+        for idx in change_indexes:
+            if idx + 10 < len(self.data_df):
+                avg = self.data_df['concentration'].iloc[idx:idx + 10].mean()
+            else:
+                avg = self.data_df['concentration'].iloc[idx:].mean()
+            averages.append(avg)
+
+        # Apply linear fitting between each pair of change indexes
+        for i in range(len(change_indexes) - 1):
+            start_index = change_indexes[i]
+            end_index = change_indexes[i + 1]
+            
+            # Start and end averages
+            start_avg = averages[i]
+            end_avg = averages[i + 1]
+
+            # Number of points between the indexes
+            num_points = end_index - start_index
+            
+            # Linear fit coefficients
+            slope = (end_avg - start_avg) / num_points
+            mean_conc = (end_avg + start_avg) / 2
+            
+            # Apply detrending
+            h = 0
+            for j in range(start_index, end_index + 1):
+                self.data_df.loc[j, 'detrended_concentration'] = self.data_df['concentration'].iloc[j] - (slope * h ) + mean_conc - start_avg
+                h += 1
+
+
+        #####
         self.avg_n_input.setText("5")
         self.ext_dilution_fac_input.setText("1")
         self.model_label.setText(f"Instrument Model: {self.model}")
@@ -1265,8 +1338,6 @@ class MainWindow(QMainWindow):
     def inst_calib(self):
         # Goes through the calibration data and calculates the calibration curves
 
-        n_average = 20
-
         self.reload_calibration()
 
         # make a linear fit of cal_diameter as a function of cal_satflow for the last three values of the dataframe cal
@@ -1303,25 +1374,7 @@ class MainWindow(QMainWindow):
         self.calibration_df = self.calibration_df.sort_values(by=['cal_satflow'], ascending=False)
         self.calibration_df = self.calibration_df.reset_index(drop=True)
 
-        # find satlow up and down transitions and average satflow_diff over 20s
-        satflow_diff = np.convolve(np.diff(self.data_df['satflow']), np.ones((n_average,))/n_average, mode='valid')
-
-        # Force the times when average flow over 20 s is zero to upscan (or downscan)
-        satflow_diff[satflow_diff == 0] = -0.01
-
-        # +4 to account for the moving average start and stop
-        nan_filler = np.zeros(int((n_average+4)/2))
-        nan_filler[:] = np.nan
-
-        self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
-
-        # Add scan number from the point of changing scans
-        self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
-
-        # filter satflow 0 out of the data
-        self.data_df = self.data_df[self.data_df['satflow'] != 0]
-
-        return self.calibration_df, self.data_df
+        return self.calibration_df
 
     # Bin the raw data to enable avaraging over scans, and to yield supplementary data for the inversion
     def bin_data(self, **kwargs):
@@ -1358,12 +1411,13 @@ class MainWindow(QMainWindow):
         self.data_df['bin_limits'] = pd.cut(self.data_df['satflow'],bins)
 
         # Calculate bin mean concentration grouped by scans and flow bins
-        self.data_df['bin_mean_c'] = self.data_df.groupby(['bins', 'scan_no'])['concentration'].transform('mean')
+        # self.data_df['bin_mean_c'] = self.data_df.groupby(['bins', 'scan_no'])['concentration'].transform('mean')
+        self.data_df['bin_mean_c'] = self.data_df.groupby(['bins', 'scan_no'])['detrended_concentration'].transform('mean')
+
 
         # Add the dilution factor to the dataframe
         dilution_factor = float(self.ext_dilution_fac_input.text())
         self.data_df['bin_mean_c'] = self.data_df['bin_mean_c'] * dilution_factor
-
 
         # Clean nans from data
         self.data_df.dropna(subset = ['satflow'],inplace=True)
