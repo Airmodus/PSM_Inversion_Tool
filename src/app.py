@@ -1171,7 +1171,7 @@ class MainWindow(QMainWindow):
             self.plot_raw()
 
     def check_instrument_errors(self, df):
-
+        
         # convert the system status hex to row of binary and handle missing values
         df['PSM_system_status_error'].fillna('0x0000', inplace=True)
         df['PSM_system_status_error'] = df['PSM_system_status_error'].apply(lambda x: bin(int(str(x), 16))[2:].zfill(16))
@@ -1199,9 +1199,12 @@ class MainWindow(QMainWindow):
         # 9 CODES_STATUS_DRAIN_LEVEL
         # 10 CODES_STATUS_AMBIENT_TEMP
         # 11 CODES_STATUS_DRAIN_TEMP
+        # 12 CODES_STATUS_CRITICAL_PRESS
+        # 13 CODES_STATUS_MFC_TEMP
+        # 14 CODES_STATUS_VACUUM_FLOW
 
         # Make a table out of the PSM system status error based on the text above
-        PSM_system_status_error = pd.DataFrame({'PSM_system_status_error': ['GROWTH TUBE TEMPERATURE', 'SATURATOR TEMPERATURE', 'SATURATOR FLOW', 'PREHEATER TEMPERATURE', 'INLET TEMPERATURE', 'MIX1 PRESSURE', 'MIX2 PRESSURE', 'ABSOLUTE PRESSURE', 'EXCESS FLOW', 'DRAIN LEVEL', 'AMBIENT TEMPERATURE', 'DRAIN TEMPERATURE']})
+        PSM_system_status_error = pd.DataFrame({'PSM_system_status_error': ['GROWTH TUBE TEMPERATURE', 'SATURATOR TEMPERATURE', 'SATURATOR FLOW', 'PREHEATER TEMPERATURE', 'INLET TEMPERATURE', 'MIX1 PRESSURE', 'MIX2 PRESSURE', 'ABSOLUTE PRESSURE', 'EXCESS FLOW', 'DRAIN LEVEL', 'AMBIENT TEMPERATURE', 'DRAIN TEMPERATURE', 'CRITICAL PRESSURE', 'MFC TEMPERATURE', 'VACUUM FLOW RATE']})
 
         # Find all unique PSM system status errors from df['PSM_system_status_error']
         PSM_system_status_error_unique = np.unique(df['PSM_system_status_error'])
