@@ -27,6 +27,7 @@ To start PSM Inversion Tool, navigate to the repository's `src` folder and run `
 ### External Python packages
 - pandas
 - NumPy
+- SciPy
 - PyQt
 - PyQtGraph
 ### Python Standard Library modules (included with Python)
