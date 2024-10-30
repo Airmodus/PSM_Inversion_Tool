@@ -1,0 +1,10 @@
+name: inversion-env
+channels:
+  - conda-forge
+dependencies:
+  - numpy
+  - pandas
+  - pyinstaller
+  - pyqt
+  - pyqtgraph
+  - scipy
