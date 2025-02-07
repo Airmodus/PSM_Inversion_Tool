@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.5.3"
+version_number = "0.5.4"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
@@ -1613,6 +1613,12 @@ class MainWindow(QMainWindow):
         if file_name:
             try:
                 save_data.to_csv(file_name, sep=',', index=False, lineterminator='\n')
+                # add software version and calibration filename to first row of the file
+                with open(file_name, 'r') as original:
+                    data = original.read()
+                with open(file_name, 'w') as modified:
+                    modified.write(f'Software version: {version_number} ; Calibration file: {self.calibration_file_label.text().split('/')[-1]}\n')
+                    modified.write(data)
                 print("Inverted data saved to", file_name)
             except:
                 self.error_output.append("Error saving inverted data")
