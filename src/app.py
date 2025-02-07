@@ -496,7 +496,7 @@ class MainWindow(QMainWindow):
         self.save_button = QPushButton("Save")
         self.save_button.setFixedWidth(150)
         self.save_button.setObjectName("button")
-        self.save_button.clicked.connect(self.save_settings)
+        self.save_button.clicked.connect(self.save_inversion_data)
         right_layout.addWidget(self.save_button, 2, 0)
 
         matlab_time = QHBoxLayout()
@@ -1550,7 +1550,7 @@ class MainWindow(QMainWindow):
                 bin_limits_text += str(bin_limit) + " "
             self.bin_limits_text.setText(bin_limits_text)
 
-    def save_settings(self):
+    def save_inversion_data(self):
         print("Saving inverted data...")
         # Save the inverted data to a file (Ninv)
         options = QFileDialog.Option.ReadOnly
