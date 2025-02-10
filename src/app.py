@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.5.3"
+version_number = "0.5.4"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
@@ -496,7 +496,7 @@ class MainWindow(QMainWindow):
         self.save_button = QPushButton("Save")
         self.save_button.setFixedWidth(150)
         self.save_button.setObjectName("button")
-        self.save_button.clicked.connect(self.save_settings)
+        self.save_button.clicked.connect(self.save_inversion_data)
         right_layout.addWidget(self.save_button, 2, 0)
 
         matlab_time = QHBoxLayout()
@@ -1553,14 +1553,14 @@ class MainWindow(QMainWindow):
                 bin_limits_text += str(bin_limit) + " "
             self.bin_limits_text.setText(bin_limits_text)
 
-    def save_settings(self):
+    def save_inversion_data(self):
         print("Saving inverted data...")
         # Save the inverted data to a file (Ninv)
         options = QFileDialog.Option.ReadOnly
         # suggest filename if a file is selected
         if self.data_file_label.text() not in ["", "No file selected"]:
             # get filename, remove file ending (.dat) and add '_dNdlogDp'
-            filename_suggestion = self.data_file_label.text().split(".")[0] + "_dNdlogDp"
+            filename_suggestion = self.data_file_label.text().replace(".dat", "") + "_dNdlogDp"
         else: # if no file selected, suggest empty string
             filename_suggestion = ""
         file_name, _ = QFileDialog.getSaveFileName(self, "Save Inverted Data", filename_suggestion, "csv Files (*.csv);;All Files (*)", options=options)
@@ -1616,6 +1616,12 @@ class MainWindow(QMainWindow):
         if file_name:
             try:
                 save_data.to_csv(file_name, sep=',', index=False, lineterminator='\n')
+                # add software version and calibration filename to first row of the file
+                with open(file_name, 'r') as original:
+                    data = original.read()
+                with open(file_name, 'w') as modified:
+                    modified.write(f'Software version: {version_number} ; Calibration file: {self.calibration_file_label.text().split('/')[-1]}\n')
+                    modified.write(data)
                 print("Inverted data saved to", file_name)
             except:
                 self.error_output.append("Error saving inverted data")
