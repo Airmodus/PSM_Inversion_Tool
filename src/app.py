@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.5.4"
+version_number = "0.5.5"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
@@ -428,7 +428,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(remove_error_data_label,4,0)
         self.remove_error_data_btn = QCheckBox()
         self.remove_error_data_btn.setStyleSheet(checkbox_stylesheet)
-        self.remove_error_data_btn.stateChanged.connect(self.remove_data_with_errors)
+        self.remove_error_data_btn.stateChanged.connect(self.remove_errors_clicked)
         left_layout.addWidget(self.remove_error_data_btn,4,1)
 
         avg_n_label = QLabel("Average N.")
@@ -950,19 +950,21 @@ class MainWindow(QMainWindow):
             """
         if file_name:
             try:
+                self.error_output.clear() # clear error output text box
                 self.data_file_label.setText(file_name)
                 self.data_file_label.setToolTip(file_name)
                 # Create a temporary file and copy the contents of the selected file
                 self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
                 shutil.copy(file_name, self.temp_data_file.name)
 
-                self.read_file()
-                
-                self.plot_raw()
+                self.read_file() # read file contents and create dataframe
+                self.remove_data_with_errors() # remove errors if button is checked
+                self.plot_raw() # plot raw data
             except Exception as e:
                 print("Error loading data file")
                 print(e)
-                self.display_errors(self.data_df)
+                self.error_output.append("Error loading data file:")
+                self.error_output.append(str(e))
 
             # Replace zero or negative values with a small positive number
             #self.data_df['concentration'] = self.data_df['concentration'].apply(lambda x: 1e-6 if x <= 0 else x)
@@ -1082,19 +1084,18 @@ class MainWindow(QMainWindow):
 
     def display_errors(self, df):
         PSM_errors, CPC_errors = self.check_instrument_errors(df)
-        self.error_output.clear()
-        self.error_output.append("PSM errors found in the data:")
         if PSM_errors:
+            self.error_output.append("PSM errors:")
             for error in PSM_errors:
                 self.error_output.append(error)
         else:
-            self.error_output.append("No PSM errors")
-        self.error_output.append("\nCPC errors found in the data:")
+            self.error_output.append("No PSM errors.")
         if CPC_errors:
+            self.error_output.append("\nCPC errors:")
             for error in CPC_errors:
                 self.error_output.append(error)
         else:
-            self.error_output.append("No CPC errors")
+            self.error_output.append("\nNo CPC errors.")
 
     def averagedata(self,Sn):
         # Averaging over scans
@@ -1151,40 +1152,30 @@ class MainWindow(QMainWindow):
         self.size_dist_plot.plot(x_values, y_values, pen=pg.mkPen(color=(126, 122, 122),style=Qt.DashLine,width=2),symbol=None, name="Single scan")
         self.size_dist_plot.plot(x2_values, y2_values, pen=pg.mkPen(color=(118, 209, 58),width=2), symbol=None, name=f'Average over {self.avg_n_input.text()} scans')
 
-    # Remove data with errors when Remove Data with Errors button is clicked
+    # when button is clicked, reload data to apply changes
+    def remove_errors_clicked(self):
+        if self.data_df is not None:
+            self.refresh_file()
+
+    # Remove data with errors if button is checked
     def remove_data_with_errors(self):
-        # Chech if the Remove Data with Errors button is checked
+        # if Remove Data with Errors button is checked, replace data with NaN where errors are present
         if self.remove_error_data_btn.isChecked():
             if self.data_df is not None:
-                # TODO: Uncomment this when PSM errors are fixed
-                #self.data_df = self.data_df[self.data_df['PSM_system_status_error'] == '0000000000000000']
-                condition = self.data_df['CPC_system_status_error'] != '0000000000000000'
-                columns_to_update = self.data_df.columns[1:-3]
-                self.data_df.loc[condition, columns_to_update] = np.nan
-                
-                
-                self.plot_raw()
-            else:
-                self.error_output.append("No data to remove errors from")
-        else:
-            self.read_file()
-            self.plot_raw()
+                # remove rows with PSM errors
+                self.data_df = self.data_df[self.data_df['PSM_system_status_error'] == '0000000000000000']
+                # remove rows with CPC errors
+                self.data_df = self.data_df[self.data_df['CPC_system_status_error'] == '0000000000000000']
 
     def check_instrument_errors(self, df):
-        
-        # convert the system status hex to row of binary and handle missing values
-        df['PSM_system_status_error'].fillna('0x0000', inplace=True)
+
+        # convert PSM system status hex to row of binary and handle missing values
+        df['PSM_system_status_error'].fillna('0x00000000', inplace=True)
         df['PSM_system_status_error'] = df['PSM_system_status_error'].apply(lambda x: bin(int(str(x), 16))[2:].zfill(16))
 
-        # convert the system status hex to row of binary
-        # df['PSM_system_status_error'] = df['PSM_system_status_error'].apply(lambda x: bin(int(x, 16))[2:].zfill(16))
-
-          # convert the system status hex to row of binary and handle missing values
-        df['CPC_system_status_error'].fillna('0x00000000', inplace=True)
+        # convert CPC system status hex to row of binary and handle missing values
+        df['CPC_system_status_error'].fillna('0x0000', inplace=True)
         df['CPC_system_status_error'] = df['CPC_system_status_error'].apply(lambda x: bin(int(str(x), 16))[2:].zfill(16))
-
-        # convert the system status hex to row of binary
-        #df['CPC_system_status_error'] = df['CPC_system_status_error'].apply(lambda x: bin(int(x, 16))[2:].zfill(16))
 
         # PSM bits correspond to errors:
         # 0 CODES_STATUS_GROWTH_TUBE_TEMP
@@ -1216,14 +1207,6 @@ class MainWindow(QMainWindow):
             for j in range(16):
                 if PSM_system_status_error_unique[i][j] == '1':
                     zeros = zeros[:j] + '1' + zeros[j+1:]
-        # print the errors in zeros based on PSM_system_status_error table and start from the right
-        print("PSM errors found in the data:")
-        if zeros == '0000000000000000':
-            print('No PSM errors')
-        else:
-            for i in range(16):
-                if zeros[15-i] == '1':
-                    print(PSM_system_status_error.iloc[i,0])
 
         PSM_errors_list = [PSM_system_status_error.iloc[i, 0] for i in range(16) if zeros[15 - i] == '1']
 
@@ -1251,22 +1234,11 @@ class MainWindow(QMainWindow):
             for j in range(16):
                 if CPC_system_status_error_unique[i][j] == '1':
                     zeros = zeros[:j] + '1' + zeros[j+1:]
-        # print the errors in zeros based on CPC_system_status_error table and start from the right
-        print("CPC errors found in the data:")
-        if zeros == '0000000000000000':
-            print('No CPC errors')
-        else:
-            for i in range(16):
-                if zeros[15-i] == '1':
-                    print(CPC_system_status_error.iloc[i,0])
 
-        # Return PSM and CPC errors as lists
         CPC_errors_list = [CPC_system_status_error.iloc[i, 0] for i in range(16) if zeros[15 - i] == '1']
 
+        # Return PSM and CPC errors as lists
         return PSM_errors_list, CPC_errors_list
-
-
-
 
     def inst_calib(self):
         # Goes through the calibration data and calculates the calibration curves
