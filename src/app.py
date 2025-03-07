@@ -1220,9 +1220,10 @@ class MainWindow(QMainWindow):
         # 6 CODES_STATUS_LIQUID_LEVEL
         # 7 CODES_STATUS_AMBIENT_TEMP
         # 8 CODES_STATUS_CRITICAL_PRESS
+        # 9 CODES_STATUS_PULSE_QUALITY
 
         # Make a table out of the CPC system status error based on the text above
-        CPC_system_status_error = pd.DataFrame({'CPC_system_status_error': ['OPTICS TEMPERATURE', 'SATURATOR TEMPERATURE', 'CONDENSER TEMPERATURE', 'ABSOLUTE PRESSURE', 'NOZZLE PRESSURE', 'LASER POWER', 'LIQUID LEVEL', 'AMBIENT TEMPERATURE', 'CRITICAL PRESSURE']})
+        CPC_system_status_error = pd.DataFrame({'CPC_system_status_error': ['OPTICS TEMPERATURE', 'SATURATOR TEMPERATURE', 'CONDENSER TEMPERATURE', 'ABSOLUTE PRESSURE', 'NOZZLE PRESSURE', 'LASER POWER', 'LIQUID LEVEL', 'AMBIENT TEMPERATURE', 'CRITICAL PRESSURE', 'PULSE QUALITY']})
 
         # Find all unique CPC system status errors
         CPC_system_status_error_unique = df['CPC_system_status_error'].unique()
