@@ -384,20 +384,20 @@ class MainWindow(QMainWindow):
         left_layout = QGridLayout()
 
 
-        self.load_data_btn = QPushButton("Load Data File")
+        self.load_data_btn = QPushButton("Load Data Files")
         self.load_data_btn.setObjectName("button")
         self.load_data_btn.setFixedWidth(150)
         self.load_data_btn.clicked.connect(self.load_data)
         left_layout.addWidget(self.load_data_btn,0,0)
-        self.data_file_label = QLabel("No file selected")
+        self.data_file_label = QLabel("No files selected")
         self.data_file_label.setObjectName("bordered")
         self.data_file_label.setMaximumWidth(250)
         self.data_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.data_file_label,0,1,1,3)
-        self.refresh_file_btn = QPushButton("Refresh File")
+        self.refresh_file_btn = QPushButton("Refresh Files")
         self.refresh_file_btn.setObjectName("button")
         self.refresh_file_btn.setFixedWidth(150)
-        self.refresh_file_btn.clicked.connect(self.refresh_file)
+        self.refresh_file_btn.clicked.connect(self.refresh_files)
         left_layout.addWidget(self.refresh_file_btn,0,4)
 
         self.load_cal_btn = QPushButton("Load Calibration File")
@@ -547,6 +547,7 @@ class MainWindow(QMainWindow):
         self.data_df = None
         self.calibration_df = None
         self.nais_data = None
+        self.current_filenames = None
 
         self.extra_features = ExtraFeatures()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
@@ -885,85 +886,105 @@ class MainWindow(QMainWindow):
             # check if "YYYY.MM.DD hh:mm:ss" is in the first line of the file
             if "YYYY.MM.DD hh:mm:ss" in file.readline(): # PSM 2.0 / Retrofit
                 print("2.0 / Retrofit")
+                # set model if not set (1st file)
+                if self.model is None:
+                    self.model = 'PSM2.0'
+                    self.model_label.setText(f"Instrument Model: {self.model}")
+                    self.update_bin_selection(self.model) # update bin selection options according to device model
+                # if model doesn't match current file, raise error
+                elif self.model != 'PSM2.0':
+                    raise Exception("Mixed data files: PSM 2.0 and A10")
                 # set parameters according to PSM 2.0
-                self.model = 'PSM2.0'
                 self.n_len_metadata = 7
                 self.CPC_time_lag = -3
             else: # A10
                 print("A10")
+                # set model if not set (1st file)
+                if self.model is None:
+                    self.model = 'A10'
+                    self.model_label.setText(f"Instrument Model: {self.model}")
+                    self.update_bin_selection(self.model) # update bin selection options according to device model
+                # if model doesn't match current file, raise error
+                elif self.model != 'A10':
+                    raise Exception("Mixed data files: PSM 2.0 and A10")
                 # set parameters according to A10
-                self.model = 'A10'
                 self.n_len_metadata = 7 # TODO: check if correct, not sure about normal PSM
                 self.CPC_time_lag = -3 # Same here, check this number
 
         # Read the temporary file into a DataFrame and rename relevant columns
         if self.model == 'PSM2.0':
             # include header if device is PSM 2.0
-            self.data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', header=0) # skiprows=1, header=None)
+            current_data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', header=0) # skiprows=1, header=None)
             # rename columns by old names
-            self.data_df.rename(columns={"Concentration from PSM (1/cm3)": "concentration", "Saturator flow rate (lpm)": "satflow", "Dilution correction factor": "dilution", "CPC system status errors (hex)": "CPC_system_status_error", "PSM system status errors (hex)": "PSM_system_status_error"}, inplace=True)
+            current_data_df.rename(columns={"Concentration from PSM (1/cm3)": "concentration", "Saturator flow rate (lpm)": "satflow", "Dilution correction factor": "dilution", "CPC system status errors (hex)": "CPC_system_status_error", "PSM system status errors (hex)": "PSM_system_status_error"}, inplace=True)
             # convert time column data to datetime, PSM2.0 format: YYYY.MM.DD hh:mm:ss
-            self.data_df['t'] = pd.to_datetime(self.data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
+            current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
         elif self.model == 'A10':
             # skip header if device is A10
-            self.data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', skiprows=1, header=None)
+            current_data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', skiprows=1, header=None)
             # rename columns by index
-            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 44: 'CPC_system_status_error', 46: 'PSM_system_status_error'}, inplace=True)
+            current_data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 44: 'CPC_system_status_error', 46: 'PSM_system_status_error'}, inplace=True)
             # convert time column data to datetime, A10 format: DD.MM.YYYY hh:mm:ss
-            self.data_df['t'] = pd.to_datetime(self.data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
-        
-        # update bin selection options according to device model
-        self.update_bin_selection(self.model)
-
-        # display PSM and CPC errors
-        self.display_errors(self.data_df)
+            current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
 
         # Apply lag correction to concentration columns (i.e. shift the concentration values up by 4)
-        self.data_df['concentration'] = self.data_df['concentration'].shift(self.CPC_time_lag)
+        current_data_df['concentration'] = current_data_df['concentration'].shift(self.CPC_time_lag)
+
+        # concatenate dataframe to self.data_df
+        self.data_df = pd.concat([self.data_df, current_data_df], ignore_index=True)
 
         self.avg_n_input.setText("5")
         self.ext_dilution_fac_input.setText("1")
-        self.model_label.setText(f"Instrument Model: {self.model}")
 
-    # refreshes data by reloading current file
-    def refresh_file(self):
-        # read current file name
-        current_filename = self.data_file_label.text()
-        # check if file name is empty
-        if current_filename == "No file selected":
-            self.error_output.append("No file selected")
-        else: # load data with current_filename
-            print("Refreshing file: " + current_filename)
-            self.load_data(current_filename=current_filename)
+    # refreshes data by reloading current files
+    def refresh_files(self):
+        if self.current_filenames is not None:
+            self.load_data(current_filenames=self.current_filenames)
+        else:
+            self.error_output.setText("No files selected.")
                   
     def load_data(self, **kwargs):
 
-        # if keyword argument 'current_filename' was given, use it
-        if 'current_filename' in kwargs:
-            file_name = kwargs['current_filename']
+        # if keyword argument 'current_filenames' was given, use it
+        if 'current_filenames' in kwargs:
+            file_names = kwargs['current_filenames']
         # if no keyword argument was given, open file dialog
         else:
             options = QFileDialog.Option.ReadOnly
-            file_name, _ = QFileDialog.getOpenFileName(self, "Load Data File", "", "dat Files (*.dat);;All Files (*)", options=options)
-            """
-            file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/SMEAR3_psm2.0_20230509.dat"
-            """
-        if file_name:
+            file_names, _ = QFileDialog.getOpenFileNames(self, "Load Data Files", "", "dat Files (*.dat);;All Files (*)", options=options)
+        if file_names:
+            # TODO if many files, ask user for confirmation before loading
             try:
                 self.error_output.clear() # clear error output text box
-                self.data_file_label.setText(file_name)
-                self.data_file_label.setToolTip(file_name)
-                # Create a temporary file and copy the contents of the selected file
-                self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
-                shutil.copy(file_name, self.temp_data_file.name)
+                self.current_filenames = file_names # store file names to variable
 
-                self.read_file() # read file contents and create dataframe
+                # set data file label information
+                if len(file_names) == 1:
+                    self.data_file_label.setText(file_names[0])
+                    self.data_file_label.setToolTip(file_names[0])
+                else:
+                    self.data_file_label.setText(f"{len(file_names)} files loaded, hover to see names")
+                    self.data_file_label.setToolTip("\n".join(file_names))
+                
+                # read each file and append to dataframe
+                self.data_df = pd.DataFrame() # reset data_df
+                self.model = None # reset device model variable
+                # TODO reset device type variable, set and check in read_file
+                for file_name in file_names:
+                    # Create a temporary file and copy the contents of current file
+                    self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
+                    shutil.copy(file_name, self.temp_data_file.name)
+                    # read file contents and concatenate to data_df dataframe
+                    self.read_file()
+                
+                self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
+            
             except Exception as e:
-                print("Error loading data file")
+                print("Error loading data files")
                 print(e)
-                self.error_output.append("Error loading data file:")
+                self.error_output.append("Error loading data files:")
                 self.error_output.append(str(e))
 
             # Replace zero or negative values with a small positive number
@@ -1155,7 +1176,7 @@ class MainWindow(QMainWindow):
     # when button is clicked, reload data to apply changes
     def remove_errors_clicked(self):
         if self.data_df is not None:
-            self.refresh_file()
+            self.refresh_files()
 
     # Remove data with errors if button is checked
     def remove_data_with_errors(self):
@@ -1531,10 +1552,10 @@ class MainWindow(QMainWindow):
         # Save the inverted data to a file (Ninv)
         options = QFileDialog.Option.ReadOnly
         # suggest filename if a file is selected
-        if self.data_file_label.text() not in ["", "No file selected"]:
+        if self.data_file_label.text() not in ["", "No files selected"]:
             # get filename, remove file ending (.dat) and add '_dNdlogDp'
             filename_suggestion = self.data_file_label.text().replace(".dat", "") + "_dNdlogDp"
-        else: # if no file selected, suggest empty string
+        else: # if no files selected, suggest empty string
             filename_suggestion = ""
         file_name, _ = QFileDialog.getSaveFileName(self, "Save Inverted Data", filename_suggestion, "csv Files (*.csv);;All Files (*)", options=options)
 
