@@ -548,6 +548,8 @@ class MainWindow(QMainWindow):
         self.calibration_df = None
         self.nais_data = None
         self.current_filenames = None
+        self.Ninv = None
+        self.Ninv_avg = None
 
         self.extra_features = ExtraFeatures()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
@@ -966,10 +968,11 @@ class MainWindow(QMainWindow):
                     self.data_file_label.setText(f"{len(file_names)} files loaded, hover to see names")
                     self.data_file_label.setToolTip("\n".join(file_names))
                 
-                # read each file and append to dataframe
                 self.data_df = pd.DataFrame() # reset data_df
                 self.model = None # reset device model variable
-                # TODO reset device type variable, set and check in read_file
+                self.Ninv = None # reset inversion dataframe
+                self.Ninv_avg = None # reset inversion average dataframe
+                # read each file and append to dataframe
                 for file_name in file_names:
                     # Create a temporary file and copy the contents of current file
                     self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
@@ -1109,14 +1112,16 @@ class MainWindow(QMainWindow):
             self.error_output.append("PSM errors:")
             for error in PSM_errors:
                 self.error_output.append(error)
+            self.error_output.append("")
         else:
-            self.error_output.append("No PSM errors.")
+            self.error_output.append("No PSM errors.\n")
         if CPC_errors:
-            self.error_output.append("\nCPC errors:")
+            self.error_output.append("CPC errors:")
             for error in CPC_errors:
                 self.error_output.append(error)
+            self.error_output.append("")
         else:
-            self.error_output.append("\nNo CPC errors.")
+            self.error_output.append("No CPC errors.\n")
 
     def averagedata(self,Sn):
         # Averaging over scans
@@ -1132,7 +1137,7 @@ class MainWindow(QMainWindow):
                 temp = temp.rolling(Sn, min_periods=1,axis = 1 ).mean()
                 temp['bins'] = self.Nbinned['bins']
                 self.Nbinned_avg = self.Nbinned_avg.merge(temp, how = 'left',on='bins')
-                self.error_output.append("Averaging over " + str(Sn) + " scans")
+                #self.error_output.append("Averaging over " + str(Sn) + " scans")
             else:
                 messageStatus = 1
                 message = "Can't average over one scan, please increase the number of scans to be averaged."
@@ -1548,14 +1553,18 @@ class MainWindow(QMainWindow):
             self.bin_limits_text.setText(bin_limits_text)
 
     def save_inversion_data(self):
+        # make sure inversion data exists
+        if self.Ninv is None:
+            self.error_output.append("No inverted data to save")
+            return
         print("Saving inverted data...")
         # Save the inverted data to a file (Ninv)
         options = QFileDialog.Option.ReadOnly
-        # suggest filename if a file is selected
-        if self.data_file_label.text() not in ["", "No files selected"]:
+        # suggest filename if one file is selected
+        if len(self.current_filenames) == 1:
             # get filename, remove file ending (.dat) and add '_dNdlogDp'
-            filename_suggestion = self.data_file_label.text().replace(".dat", "") + "_dNdlogDp"
-        else: # if no files selected, suggest empty string
+            filename_suggestion = self.current_filenames[0].replace(".dat", "") + "_dNdlogDp"
+        else: # if multiple files are selected, suggest empty string
             filename_suggestion = ""
         file_name, _ = QFileDialog.getSaveFileName(self, "Save Inverted Data", filename_suggestion, "csv Files (*.csv);;All Files (*)", options=options)
 
@@ -1617,8 +1626,10 @@ class MainWindow(QMainWindow):
                     modified.write(f'Software version: {version_number} ; Calibration file: {self.calibration_file_label.text().split('/')[-1]}\n')
                     modified.write(data)
                 print("Inverted data saved to", file_name)
-            except:
-                self.error_output.append("Error saving inverted data")
+                self.error_output.append("Inverted data saved to " + file_name)
+            except Exception as e:
+                self.error_output.append("Error saving inverted data:")
+                self.error_output.append(str(e))
 
     def keyPressEvent(self,event):
         if self.markers_added == True:
