@@ -968,7 +968,7 @@ class MainWindow(QMainWindow):
         # if no keyword argument was given, open file dialog
         else:
             options = QFileDialog.Option.ReadOnly
-            file_names, _ = QFileDialog.getOpenFileNames(self, "Load Data Files", "", "dat Files (*.dat);;All Files (*)", options=options)
+            file_names, _ = QFileDialog.getOpenFileNames(self, "Load Data Files", "", "PSM data files (*PSM*.dat);;All data files (*.dat);;All files (*)", options=options)
         if file_names:
             # TODO if many files, ask user for confirmation before loading
             # set cursor to loading
