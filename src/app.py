@@ -626,11 +626,16 @@ class MainWindow(QMainWindow):
             # putting the date in the title
             formatted_date = str(self.data_df['t'][0]).split()[0] 
             year, month, day = formatted_date.split('-')
-            formatted_date = f'{day}/{month}/{year}'
-            print(formatted_date)
+            # if data is from multiple days, add the last day to the title
+            end_date = str(self.data_df['t'].iloc[-1]).split()[0]
+            if end_date != formatted_date:
+                end_year, end_month, end_day = end_date.split('-')
+                formatted_date = f'{day}/{month}/{year} - {end_day}/{end_month}/{end_year}'
+            else:
+                formatted_date = f'{day}/{month}/{year}'
             # setting the raw plot title
-            self.raw_plot.setTitle(f"Raw Data - {formatted_date}", size="9pt")
-            self.mid_plot.setTitle(f"Inverted size distribution - {formatted_date}", size="9pt")
+            self.raw_plot.setTitle(f"Raw Data {formatted_date}", size="9pt")
+            self.mid_plot.setTitle(f"Inverted size distribution {formatted_date}", size="9pt")
 
             # Create color bar plot
             min_satflow = satflow_values.min()
@@ -1086,7 +1091,7 @@ class MainWindow(QMainWindow):
         _date,_time = raw_time.split('T')
         _year,_month,_day = _date.split('-')
         _hour,_minute,_second = _time.split(':')
-        formatted_time = f"{_day}.{_month}.{_year} - {_hour}:{_minute}:{_second}"
+        formatted_time = f"{_day}/{_month}/{_year} {_hour}:{_minute}:{_second}"
         self.size_dist_plot.setTitle(f"Scan Start Time: {formatted_time}", size="9pt")
 
         # if nais data has been loaded, convert scan_start_time to datetime object and send to update_nais()
