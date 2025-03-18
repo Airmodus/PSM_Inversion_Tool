@@ -590,26 +590,29 @@ class MainWindow(QMainWindow):
             concentration_values = self.data_df['concentration']
             satflow_values = self.data_df['satflow']
 
-
             # Create a colormap
             cm = pg.colormap.get('viridis')
-            
             # normalize satflow to range 0,1 for colormap
             norm_satflow = (satflow_values - satflow_values.min()) / (satflow_values.max() - satflow_values.min())
-
-            # normalized concentration to colors
-            colors = cm.map(norm_satflow, 'qcolor')
-            # convert colors to brushes
+            # round values to 1 decimal to reduce draw time
+            norm_satflow = norm_satflow.round(1)
+            # create brush color for each normalized satflow level
+            norm_satflow_levels = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0]
+            colors = cm.map(norm_satflow_levels, 'qcolor')
             brushes = [pg.mkBrush(color) for color in colors]
-            # making an outline to points
-            outline_pen = pg.mkPen(color=(255, 255, 255), width=.2)
 
+            # Create ScatterPlotItem
+            scatter_plot_item = pg.ScatterPlotItem(symbol='o', pxMode=True, pen=pg.mkPen(color=(255, 255, 255), width=.2))
+            # add points one normalized satflow level at a time
+            for i in range(len(norm_satflow_levels)):
+                # get indices matching current normalized satflow level
+                indices = np.where(norm_satflow == norm_satflow_levels[i])[0].tolist()
+                # add points with matching indices and brush color
+                scatter_plot_item.addPoints(self.posix_timestamps[indices], concentration_values[indices], brush=brushes[i])
+            
+            # Create a marker for the raw plot
             self.raw_plot_marker.setPos(0)
-
             self.raw_plot.addItem(self.raw_plot_marker)
-            # Create the ScatterPlotItem and set colors
-            scatter_plot_item = pg.ScatterPlotItem(self.posix_timestamps, concentration_values, symbol='o', pxMode=True, pen=outline_pen)
-            scatter_plot_item.setBrush(brushes)
 
             self.raw_plot.setAxisItems({'bottom': TimeAxisItemForRaw(self.posix_timestamps,orientation='bottom')})
             #self.raw_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
@@ -1212,6 +1215,8 @@ class MainWindow(QMainWindow):
                 self.data_df = self.data_df[self.data_df['PSM_system_status_error'] == '0000000000000000']
                 # remove rows with CPC errors
                 self.data_df = self.data_df[self.data_df['CPC_system_status_error'] == '0000000000000000']
+                # reset dataframe index
+                self.data_df.reset_index(drop=True, inplace=True)
 
     def check_instrument_errors(self, df):
 
