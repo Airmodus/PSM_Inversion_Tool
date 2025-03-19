@@ -33,4 +33,5 @@ from PyQt5.QtWidgets import (QApplication,
                              QPushButton,
                              QFileDialog,
                              QCheckBox,
-                             QSplitter)
+                             QSplitter,
+                             QSizePolicy)

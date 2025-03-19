@@ -386,7 +386,7 @@ class MainWindow(QMainWindow):
         left_layout = QGridLayout()
 
 
-        self.load_data_btn = QPushButton("Load Data Files")
+        self.load_data_btn = QPushButton("Load data files")
         self.load_data_btn.setObjectName("button")
         self.load_data_btn.setFixedWidth(150)
         self.load_data_btn.clicked.connect(self.load_data)
@@ -396,13 +396,13 @@ class MainWindow(QMainWindow):
         self.data_file_label.setMaximumWidth(250)
         self.data_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.data_file_label,0,1,1,3)
-        self.refresh_file_btn = QPushButton("Refresh Files")
+        self.refresh_file_btn = QPushButton("Refresh files")
         self.refresh_file_btn.setObjectName("button")
         self.refresh_file_btn.setFixedWidth(150)
         self.refresh_file_btn.clicked.connect(self.refresh_files)
         left_layout.addWidget(self.refresh_file_btn,0,4)
 
-        self.load_cal_btn = QPushButton("Load Calibration File")
+        self.load_cal_btn = QPushButton("Load calibration file")
         self.load_cal_btn.setObjectName("button")
         self.load_cal_btn.setFixedWidth(150)
         self.load_cal_btn.clicked.connect(self.load_calibration)
@@ -412,13 +412,18 @@ class MainWindow(QMainWindow):
         self.calibration_file_label.setMaximumWidth(250)
         self.calibration_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.calibration_file_label,1,1,1,3)
+        self.invert_and_plot_btn = QPushButton("Invert and plot")
+        self.invert_and_plot_btn.setObjectName("button")
+        self.invert_and_plot_btn.setFixedWidth(150)
+        self.invert_and_plot_btn.clicked.connect(self.invert_and_plot)
+        left_layout.addWidget(self.invert_and_plot_btn, 1, 4)
 
         # adding a space to row 2
         spacer = QSpacerItem(30, 30)
         left_layout.addItem(spacer,2,0)
 
 
-        data_filtering_label = QLabel("Raw Data Quality Filtering")
+        data_filtering_label = QLabel("Raw data quality filtering")
         left_layout.addWidget(data_filtering_label,3,0)
         self.data_filtering_btn = QCheckBox()
         self.data_filtering_btn.setStyleSheet(checkbox_stylesheet)
@@ -426,14 +431,14 @@ class MainWindow(QMainWindow):
         self.data_filtering_btn.stateChanged.connect(self.checkbox_button_state_changed)
         left_layout.addWidget(self.data_filtering_btn,3,1)
         
-        remove_error_data_label = QLabel("Remove Data With Errors")
+        remove_error_data_label = QLabel("Remove data with errors")
         left_layout.addWidget(remove_error_data_label,4,0)
         self.remove_error_data_btn = QCheckBox()
         self.remove_error_data_btn.setStyleSheet(checkbox_stylesheet)
         self.remove_error_data_btn.stateChanged.connect(self.remove_errors_clicked)
         left_layout.addWidget(self.remove_error_data_btn,4,1)
 
-        avg_n_label = QLabel("Average N.")
+        avg_n_label = QLabel("Average number")
         avg_n_label.setToolTip("Number of data points to average over")
         left_layout.addWidget(avg_n_label,5,0)
         self.avg_n_input = QLineEdit()
@@ -442,7 +447,7 @@ class MainWindow(QMainWindow):
         self.avg_n_input.setValidator(validator)
         left_layout.addWidget(self.avg_n_input,5,1)
 
-        ext_dilution_fac_label = QLabel("External Dilution Factor")
+        ext_dilution_fac_label = QLabel("External dilution factor")
         left_layout.addWidget(ext_dilution_fac_label,6,0)
         # Allow for float values in the external dilution factor input
         dil_validator = QDoubleValidator()
@@ -456,20 +461,20 @@ class MainWindow(QMainWindow):
         self.ext_dilution_fac_input.setValidator(dil_validator)
         left_layout.addWidget(self.ext_dilution_fac_input,6,1)
 
-        self.inversion_method_label = QLabel("Inversion Method")
+        self.inversion_method_label = QLabel("Inversion method")
         left_layout.addWidget(self.inversion_method_label,3,2)
         self.inversion_method_selection = QComboBox()
         self.inversion_method_selection.setFixedWidth(120)
-        self.inversion_method_selection.addItems(["Step Wise"]) # ,"Kernel","EM"
+        self.inversion_method_selection.addItems(["Stepwise"]) # ,"Kernel","EM"
         left_layout.addWidget(self.inversion_method_selection,3,3)
 
-        bin_label = QLabel("Number of Bins")
+        bin_label = QLabel("Number of bins")
         left_layout.addWidget(bin_label,4,2)
         self.bin_selection = QComboBox()
         self.bin_selection.setFixedWidth(60)
         left_layout.addWidget(self.bin_selection,4,3)
 
-        bin_limits_label = QLabel("Bin Limits:")
+        bin_limits_label = QLabel("Bin limits:")
         left_layout.addWidget(bin_limits_label,5,2)
         # label showing bin sizes according to selected amount of bins
         self.bin_limits_text = QLabel()
@@ -489,44 +494,54 @@ class MainWindow(QMainWindow):
         self.error_output.setReadOnly(True)
         right_layout.addWidget(self.error_output,0,0,1,3)
 
-        self.invert_and_plot_btn = QPushButton("Invert and Plot")
-        self.invert_and_plot_btn.setObjectName("button")
-        self.invert_and_plot_btn.setFixedWidth(150)
-        self.invert_and_plot_btn.clicked.connect(self.invert_and_plot)
-        right_layout.addWidget(self.invert_and_plot_btn, 1, 0)
+        right_left_widget = QWidget()
+        right_left_widget.setMaximumWidth(200)
+        right_left_layout = QVBoxLayout()
+        right_left_widget.setLayout(right_left_layout)
+        right_layout.addWidget(right_left_widget,1,0)
 
-        self.save_button = QPushButton("Save")
-        self.save_button.setFixedWidth(150)
+        self.save_button = QPushButton("Save data")
         self.save_button.setObjectName("button")
         self.save_button.clicked.connect(self.save_inversion_data)
-        right_layout.addWidget(self.save_button, 2, 0)
+        right_left_layout.addWidget(self.save_button)
+
+        daily_files = QHBoxLayout()
+        daily_files_label = QLabel("Create daily files")
+        self.daily_files_btn = QCheckBox()
+        self.daily_files_btn.setStyleSheet(checkbox_stylesheet)
+        daily_files.addWidget(daily_files_label)
+        daily_files.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        daily_files.addWidget(self.daily_files_btn)
+        right_left_layout.addLayout(daily_files)
 
         matlab_time = QHBoxLayout()
         matlab_time_label = QLabel("Matlab time format")
         self.matlab_time_btn = QCheckBox()
         self.matlab_time_btn.setStyleSheet(checkbox_stylesheet)
         matlab_time.addWidget(matlab_time_label)
+        matlab_time.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
         matlab_time.addWidget(self.matlab_time_btn)
-        right_layout.addLayout(matlab_time, 3, 0)
+        right_left_layout.addLayout(matlab_time)
 
-        # add spacer item between columns
-        right_layout.addItem(QSpacerItem(0, 0), 1, 1)
+        right_right_widget = QWidget()
+        right_right_widget.setMaximumWidth(200)
+        right_right_layout = QVBoxLayout()
+        right_right_widget.setLayout(right_right_layout)
+        right_layout.addWidget(right_right_widget,1,2)
 
         # create widgets for NAIS data loading
         self.nais_data_label = QLabel("No NAIS data file selected")
         self.nais_data_label.setObjectName("bordered")
-        self.nais_data_label.setMaximumWidth(300)
         self.nais_data_label.setAlignment(Qt.AlignRight)
-        right_layout.addWidget(self.nais_data_label, 1, 2)
+        right_right_layout.addWidget(self.nais_data_label)
         self.nais_data_btn = QPushButton("Load NAIS data")
         self.nais_data_btn.setObjectName("button")
-        self.nais_data_btn.setMaximumWidth(300)
         self.nais_data_btn.clicked.connect(self.load_nais_data)
-        right_layout.addWidget(self.nais_data_btn, 2, 2)
+        right_right_layout.addWidget(self.nais_data_btn)
 
         # create plot calibration file button
-        self.plot_calibration_file_btn = QPushButton("Plot Calibration File")
-        right_layout.addWidget(self.plot_calibration_file_btn, 3, 2)
+        self.plot_calibration_file_btn = QPushButton("Plot calibration file")
+        right_right_layout.addWidget(self.plot_calibration_file_btn)
 
         controls_layout.addLayout(right_layout)
         controls_layout.setStretchFactor(left_layout, 1)
@@ -685,7 +700,7 @@ class MainWindow(QMainWindow):
         self.application.setOverrideCursor(Qt.WaitCursor)
 
         try:
-            if self.inversion_method_selection.currentText() == "Step Wise":
+            if self.inversion_method_selection.currentText() == "Stepwise":
 
 
                 """
@@ -883,6 +898,9 @@ class MainWindow(QMainWindow):
                     # Add label to the color bar plot
                     # self.mid_color_bar_plot.setLabel('left', "dN/dlogDp [cm-3]")
 
+                    # Update the plots in order to show the changes in the dilution factor in the single scan plot
+                    self.update_plot()
+
                 else:
                     if self.data_df is None and self.calibration_df is None:
                         self.error_output.append("No data to plot")
@@ -892,9 +910,6 @@ class MainWindow(QMainWindow):
                         self.error_output.append("No data file selected")
             else:
                 self.error_output.append("Choose inversion method first")
-            
-            # Update the plots in order to show the changes in the dilution factor in the single scan plot
-            self.update_plot()
 
             # restore cursor to normal
             self.application.restoreOverrideCursor()
@@ -976,7 +991,7 @@ class MainWindow(QMainWindow):
         # if no keyword argument was given, open file dialog
         else:
             options = QFileDialog.Option.ReadOnly
-            file_names, _ = QFileDialog.getOpenFileNames(self, "Load Data Files", "", "PSM data files (*PSM*.dat);;All data files (*.dat);;All files (*)", options=options)
+            file_names, _ = QFileDialog.getOpenFileNames(self, "Load data files", "", "PSM data files (*PSM*.dat);;All data files (*.dat);;All files (*)", options=options)
         if file_names:
             # TODO if many files, ask user for confirmation before loading
             # set cursor to loading
@@ -1033,7 +1048,7 @@ class MainWindow(QMainWindow):
 
         
     def load_calibration(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Load Calibration File", "", "Text Files (*.txt);;All Files (*)")
+        file_name, _ = QFileDialog.getOpenFileName(self, "Load calibration file", "", "Text files (*.txt);;All files (*)")
         self.cal_file_name = file_name
         """
         file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/CF_ALL_ALT.txt"
@@ -1117,7 +1132,7 @@ class MainWindow(QMainWindow):
 
     def load_nais_data(self):
         options = QFileDialog.Option.ReadOnly
-        file_name, _ = QFileDialog.getOpenFileName(self, "Load NAIS Data File", "", "txt Files (*.txt);;All Files (*)", options=options)
+        file_name, _ = QFileDialog.getOpenFileName(self, "Load NAIS data file", "", "Text files (*.txt);;All files (*)", options=options)
         if file_name:
             try:
                 # read NAIS file into dataframe
@@ -1595,8 +1610,12 @@ class MainWindow(QMainWindow):
             # get filename, remove file ending (.dat) and add '_dNdlogDp'
             filename_suggestion = self.current_filenames[0].replace(".dat", "") + "_dNdlogDp"
         else: # if multiple files are selected, suggest empty string
+            # TODO check if daily_files_btn is checked, create filenames according to timestamps or data file names
             filename_suggestion = ""
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save Inverted Data", filename_suggestion, "csv Files (*.csv);;All Files (*)", options=options)
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save inverted data", filename_suggestion, "csv files (*.csv);;All files (*)", options=options)
+        # if file dialog is canceled, return
+        if not file_name:
+            return
 
         # construct headers list for the output file
         dp_headers = []
@@ -1653,7 +1672,7 @@ class MainWindow(QMainWindow):
                 with open(file_name, 'r') as original:
                     data = original.read()
                 with open(file_name, 'w') as modified:
-                    modified.write(f'Software version: {version_number} ; Calibration file: {self.calibration_file_label.text().split('/')[-1]}\n')
+                    modified.write(f"Software version: {version_number} ; Calibration file: {self.calibration_file_label.text().split('/')[-1]}\n")
                     modified.write(data)
                 print("Inverted data saved to", file_name)
                 self.error_output.append("Inverted data saved to " + file_name)
