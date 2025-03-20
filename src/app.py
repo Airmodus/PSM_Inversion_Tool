@@ -1597,88 +1597,135 @@ class MainWindow(QMainWindow):
                 bin_limits_text += str(bin_limit) + " "
             self.bin_limits_text.setText(bin_limits_text)
 
+    # save inversion data to a file or multiple files
     def save_inversion_data(self):
         # make sure inversion data exists
         if self.Ninv is None:
             self.error_output.append("No inverted data to save")
             return
         print("Saving inverted data...")
-        # Save the inverted data to a file (Ninv)
-        options = QFileDialog.Option.ReadOnly
-        # suggest filename if one file is selected
-        if len(self.current_filenames) == 1:
-            # get filename, remove file ending (.dat) and add '_dNdlogDp'
-            filename_suggestion = self.current_filenames[0].replace(".dat", "") + "_dNdlogDp"
-        else: # if multiple files are selected, suggest empty string
-            # TODO check if daily_files_btn is checked, create filenames according to timestamps or data file names
-            filename_suggestion = ""
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save inverted data", filename_suggestion, "csv files (*.csv);;All files (*)", options=options)
-        # if file dialog is canceled, return
-        if not file_name:
-            return
-
-        # construct headers list for the output file
-        dp_headers = []
-        # get LowerDp and UpperDp values on each row
-        # using i+1 as index to skip index 0 (rows start from 1)
-        for i in range(len(self.Ninv)):
-            lower = str(round(self.Ninv['LowerDp'][i+1], 2)) # round to 2 decimals
-            upper = str(round(self.Ninv['UpperDp'][i+1], 2)) # round to 2 decimals
-            # construct header string and add to list
-            dp_headers.append('Bin ' + lower + '-' + upper + ' nm')
-        #print(dp_headers)
-
-        # transpose the Ninv dataframe to get bins as columns and scans as rows
-        save_data = self.Ninv.T
-        # filter rows that start with 'dN' to leave out metadata rows
-        save_data = save_data.filter(regex='^dN', axis=0)
-        # add dp_headers as column names
-        save_data.columns = dp_headers
-        # reverse the order of columns: from smallest bin to largest bin
-        save_data = save_data[save_data.columns[::-1]]
-
-        # round values >= 1 to 2 decimals
-        save_data = save_data.mask(save_data >= 1, save_data.astype(float).round(2))
-        # round values < 1 to 2 significant numbers
-        save_data = save_data.mask(save_data < 1, save_data.applymap(lambda x: float("%.2g" % x)))
-
-        # if Matlab time format is toggled on, convert scan_start_time values to Matlab format
-        if self.matlab_time_btn.isChecked():
-            matlab_start_times = []
-            for i in self.scan_start_time:
-                # convert numpy.datetime64 object to datetime object
-                t = pd.to_datetime(i)
-                # convert datetime object to Matlab format: dd-mmm-yyyy HH:MM:SS e.g. 19-Aug-2023 14:23:01
-                t = t.strftime('%d-%b-%Y %H:%M:%S')
-                # add time to matlab_start_times list
-                matlab_start_times.append(t)
-            # add scan start times in Matlab format as first column
-            save_data.insert(0, 'Scan start time', matlab_start_times)
-        # if Matlab time format is toggled off, use start_scan_time as it is
-        else:
-            # add scan start times as first column
-            save_data.insert(0, 'Scan start time', self.scan_start_time)
+        daily_files = False
+        # if daily files is checked and multiple files are loaded, select save folder
+        if self.daily_files_btn.isChecked() and len(self.current_filenames) > 1:
+            # browse for save folder
+            directory = QFileDialog.getExistingDirectory(self, "Select save folder")
+            # if file dialog is canceled, return
+            if not directory:
+                return
+            # set daily_files flag, create filenames and dataframes later
+            daily_files = True
+        else: # otherwise, select single save file
+            # suggest filename if one file is selected
+            if len(self.current_filenames) == 1:
+                # get filename, remove file ending (.dat) and add '_dNdlogDp'
+                filename_suggestion = self.current_filenames[0].replace(".dat", "") + "_dNdlogDp"
+            else: # if multiple files are selected, suggest empty string
+                filename_suggestion = ""
+            # open file dialog
+            file_name, _ = QFileDialog.getSaveFileName(self, "Save inverted data", filename_suggestion, "csv files (*.csv);;All files (*)", options=QFileDialog.Option.ReadOnly)
+            # if file dialog is canceled, return
+            if not file_name:
+                return
+            filenames = [file_name]
         
-        # calculate concentration values above largest bin
-        larger_concentration = concentration_above_bins(self.scan_start_time, self.data_df, self.lowest_bin_limit)
-        # add result as column to save_data dataframe
-        highest_dp = str(round(self.Ninv['UpperDp'].iloc[0], 2))
-        save_data[('Dp >' + highest_dp + ' nm total number concentration')] = larger_concentration
+        # set cursor to loading
+        self.application.setOverrideCursor(Qt.WaitCursor)
+        
+        try:
+            # construct headers list for the output file
+            dp_headers = []
+            # get LowerDp and UpperDp values on each row
+            # using i+1 as index to skip index 0 (rows start from 1)
+            for i in range(len(self.Ninv)):
+                lower = str(round(self.Ninv['LowerDp'][i+1], 2)) # round to 2 decimals
+                upper = str(round(self.Ninv['UpperDp'][i+1], 2)) # round to 2 decimals
+                # construct header string and add to list
+                dp_headers.append('Bin ' + lower + '-' + upper + ' nm')
+            #print(dp_headers)
 
-        if file_name:
-            try:
-                save_data.to_csv(file_name, sep=',', index=False, lineterminator='\n')
-                # add software version and calibration filename to first row of the file
-                with open(file_name, 'r') as original:
-                    data = original.read()
-                with open(file_name, 'w') as modified:
-                    modified.write(f"Software version: {version_number} ; Calibration file: {self.calibration_file_label.text().split('/')[-1]}\n")
-                    modified.write(data)
-                print("Inverted data saved to", file_name)
-                self.error_output.append("Inverted data saved to " + file_name)
-            except Exception as e:
-                self.error_output.append("Error saving inverted data:")
-                self.error_output.append(str(e))
+            # transpose the Ninv dataframe to get bins as columns and scans as rows
+            save_data = self.Ninv.T
+            # filter rows that start with 'dN' to leave out metadata rows
+            save_data = save_data.filter(regex='^dN', axis=0)
+            # add dp_headers as column names
+            save_data.columns = dp_headers
+            # reverse the order of columns: from smallest bin to largest bin
+            save_data = save_data[save_data.columns[::-1]]
+
+            # round values >= 1 to 2 decimals
+            save_data = save_data.mask(save_data >= 1, save_data.astype(float).round(2))
+            # round values < 1 to 2 significant numbers
+            save_data = save_data.mask(save_data < 1, save_data.map(lambda x: float("%.2g" % x)))
+
+            # if Matlab time format is toggled on, convert scan_start_time values to Matlab format
+            if self.matlab_time_btn.isChecked():
+                matlab_start_times = []
+                for i in self.scan_start_time:
+                    # convert numpy.datetime64 object to datetime object
+                    t = pd.to_datetime(i)
+                    # convert datetime object to Matlab format: dd-mmm-yyyy HH:MM:SS e.g. 19-Aug-2023 14:23:01
+                    t = t.strftime('%d-%b-%Y %H:%M:%S')
+                    # add time to matlab_start_times list
+                    matlab_start_times.append(t)
+                # add scan start times in Matlab format as first column
+                save_data.insert(0, 'Scan start time', matlab_start_times)
+            # if Matlab time format is toggled off, use start_scan_time as it is
+            else:
+                # add scan start times as first column
+                save_data.insert(0, 'Scan start time', self.scan_start_time)
+            
+            # calculate concentration values above largest bin
+            larger_concentration = concentration_above_bins(self.scan_start_time, self.data_df, self.lowest_bin_limit)
+            # add result as column to save_data dataframe
+            highest_dp = str(round(self.Ninv['UpperDp'].iloc[0], 2))
+            save_data[('Dp >' + highest_dp + ' nm total number concentration')] = larger_concentration
+
+            # if daily_files flag is set, create daily dataframes and filenames
+            if daily_files:
+                # find unique dates from scan start times
+                unique_dates = pd.to_datetime(save_data['Scan start time']).dt.date.unique()
+                # create empty lists for dataframes and filenames
+                dataframes = []
+                filenames = []
+                # loop through all unique dates
+                for date in unique_dates:
+                    # filter save_data by date
+                    dataframe = save_data[pd.to_datetime(save_data['Scan start time']).dt.date == date]
+                    # create filename with YYYYMMDD date
+                    filename = directory + '/' + date.strftime('%Y%m%d') + '_dNdlogDp' + '.csv'
+                    # add filename and dataframe to lists
+                    filenames.append(filename)
+                    dataframes.append(dataframe)
+            # if only one file, put save_data as one element into dataframes list
+            else:
+                dataframes = [save_data]
+
+            # loop through all filenames and dataframes
+            for i in range(len(filenames)):
+                try:
+                    filename = filenames[i]
+                    dataframe = dataframes[i]
+                    # save data to file
+                    dataframe.to_csv(filename, sep=',', index=False, lineterminator='\n')
+                    # add software version and calibration filename to first row of the file
+                    with open(filename, 'r') as original:
+                        data = original.read()
+                    with open(filename, 'w') as modified:
+                        modified.write(f"Software version: {version_number} ; Calibration file: {self.calibration_file_label.text().split('/')[-1]}\n")
+                        modified.write(data)
+                    print("Inverted data saved to", filename)
+                    self.error_output.append("Inverted data saved to " + filename)
+                except Exception as e:
+                    self.error_output.append("Error saving inverted data:")
+                    self.error_output.append(str(e))
+            
+            # restore cursor to normal
+            self.application.restoreOverrideCursor()
+        
+        except Exception as e:
+            self.error_output.append("Error saving inverted data:")
+            self.error_output.append(str(e))
+            self.application.restoreOverrideCursor() # restore cursor to normal
 
     def keyPressEvent(self,event):
         if self.markers_added == True:
