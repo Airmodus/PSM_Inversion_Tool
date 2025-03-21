@@ -52,7 +52,7 @@ class TimeAxisItemForContour(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
         ticks = []
         for value in values:
-            if 0 <= value <= len(self.scan_start_time):
+            if 0 <= value < len(self.scan_start_time):
                 value = self.scan_start_time[int(value)]
                 timestamp = (value - np.datetime64('1970-01-01T00:00:00')) / np.timedelta64(1, 's')
                 value = time.strftime("%H:%M:%S", time.gmtime(timestamp))
@@ -629,7 +629,8 @@ class MainWindow(QMainWindow):
             self.raw_plot_marker.setPos(0)
             self.raw_plot.addItem(self.raw_plot_marker)
 
-            self.raw_plot.setAxisItems({'bottom': TimeAxisItemForRaw(self.posix_timestamps,orientation='bottom')})
+            #self.raw_plot.setAxisItems({'bottom': TimeAxisItemForRaw(self.posix_timestamps,orientation='bottom')})
+            self.raw_plot.setAxisItems({'bottom': pg.DateAxisItem(utcOffset=0)})
             #self.raw_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
             self.raw_plot.getAxis('bottom').setGrid(0)
             self.raw_plot.getAxis('bottom').enableAutoSIPrefix(False) # disable auto SI prefix
