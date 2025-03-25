@@ -2,7 +2,7 @@
 
 The Airmodus PSM Inversion Tool -software is intended for the data inversion of the Airmodus A10 and PSM 2.0.
 
-An .exe version of the software is available by request from info@airmodus.com
+An .exe version of the software can be downloaded from the repository's [Releases](https://github.com/Airmodus/PSM_Inversion_Tool/releases) section.
 ## Environment setup instructions
 ### 1. Install Anaconda
 The project is being developed using the Anaconda Python distribution. Anaconda's installation instructions can be found [here](https://docs.anaconda.com/anaconda/install/).
