@@ -1655,12 +1655,18 @@ class MainWindow(QMainWindow):
             # set daily_files flag, create filenames and dataframes later
             daily_files = True
         else: # otherwise, select single save file
-            # suggest filename if one file is selected
+            # suggest filename based on original name if one file is selected
             if len(self.current_filenames) == 1:
                 # get filename, remove file ending (.dat) and add '_dNdlogDp'
                 filename_suggestion = self.current_filenames[0].replace(".dat", "") + "_dNdlogDp"
-            else: # if multiple files are selected, suggest empty string
-                filename_suggestion = ""
+            else: # if multiple files are selected, suggest filename with day (YYYYMMDD) or days (YYYYMMDD-YYYYMMDD)
+                # find unique days in scan_start_time
+                unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
+                # if only one day, suggest filename with that day
+                if len(unique_days) == 1:
+                    filename_suggestion = str(str(unique_days[0]).replace("-", "")) + "_dNdlogDp"
+                else: # if multiple days, suggest filename with first and last day
+                    filename_suggestion = str(str(unique_days[0]).replace("-", "")) + "-" + str(str(unique_days[-1]).replace("-", "")) + "_dNdlogDp"
             # open file dialog
             file_name, _ = QFileDialog.getSaveFileName(self, "Save inverted data", filename_suggestion, "csv files (*.csv);;All files (*)", options=QFileDialog.Option.ReadOnly)
             # if file dialog is canceled, return
