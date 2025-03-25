@@ -276,7 +276,7 @@ class MainWindow(QMainWindow):
 
         # this will be set to True the first time invert_and_plot is called
         self.markers_added = False
-        self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=False,pen='r')
+        self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=False,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
         self.raw_plot_marker.hide()
 
         # - main_layout/graph_layout
@@ -310,7 +310,7 @@ class MainWindow(QMainWindow):
         # main_layout/graph_layout/mid_layout
         self.mid_layout = QGridLayout()
 
-        self.mid_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen='r')
+        self.mid_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
 
         self.mid_plot = pg.PlotWidget(background='w',title="Contour")
         # Get the title label and set its font properties
@@ -362,21 +362,32 @@ class MainWindow(QMainWindow):
         # Add the graph layout to the main layout.
         main_layout.addLayout(self.graph_layout)
 
-        # create plot settings layout TODO
-        plot_settings_layout = QGridLayout() # box or grid?
+        # create plot settings layout
+        plot_settings_layout = QHBoxLayout()
         # create show errors button and add to plot settings layout TODO uncomment when show errors is functional
         #self.show_errors_on_raw_btn = QCheckBox("Show Errors")
         #plot_settings_layout.addWidget(self.show_errors_on_raw_btn, 0, 1)
-        # create space using empty label to align raw avg combobox with mid plot
-        # TODO this is a placeholder, remove when show errors is ready
-        empty_label = QLabel("")
-        plot_settings_layout.addWidget(empty_label, 0, 1)
-        # create average vs. raw combobox and add to plot settings layout
+        # add empty label for alignment TODO replace when show errors is ready
+        plot_settings_layout.addWidget(QLabel(""), stretch=1)
+        # create layout for middle plot settings
+        mid_plot_settings = QHBoxLayout()
+        # create average vs. raw combobox and add to mid_plot_settings layout
         self.avg_vs_raw_combobox = QComboBox()
         self.avg_vs_raw_combobox.setMaximumWidth(100)
         self.avg_vs_raw_combobox.addItems(["Raw","Average"])
         self.avg_vs_raw_combobox.setCurrentIndex(0)
-        plot_settings_layout.addWidget(self.avg_vs_raw_combobox, 0, 2, 1, 2) # set grid span to 2 to handle extra space in the layout
+        mid_plot_settings.addWidget(self.avg_vs_raw_combobox)
+        # create toggle button for day markers and add to mid_plot_settings layout
+        self.day_markers_btn = QCheckBox("Day markers")
+        self.day_markers_btn.setStyleSheet(checkbox_stylesheet)
+        self.day_markers_btn.setChecked(True)
+        self.day_markers_btn.clicked.connect(self.toggle_day_markers)
+        mid_plot_settings.addWidget(self.day_markers_btn)
+        mid_plot_settings.addWidget(QLabel("")) # add empty label for alignment
+        # add mid_plot_settings to plot_settings_layout
+        plot_settings_layout.addLayout(mid_plot_settings, stretch=1)
+        # add empty label for alignment
+        plot_settings_layout.addWidget(QLabel(""), stretch=1)
         # add plot settings layout to main layout
         main_layout.addLayout(plot_settings_layout)
 
@@ -567,6 +578,7 @@ class MainWindow(QMainWindow):
         self.current_filenames = None
         self.Ninv = None
         self.Ninv_avg = None
+        self.day_markers = []
 
         self.extra_features = ExtraFeatures()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
@@ -624,10 +636,6 @@ class MainWindow(QMainWindow):
                 indices = np.where(norm_satflow == norm_satflow_levels[i])[0].tolist()
                 # add points with matching indices and brush color
                 scatter_plot_item.addPoints(self.posix_timestamps[indices], concentration_values[indices], brush=brushes[i])
-            
-            # Create a marker for the raw plot
-            self.raw_plot_marker.setPos(0)
-            self.raw_plot.addItem(self.raw_plot_marker)
 
             #self.raw_plot.setAxisItems({'bottom': TimeAxisItemForRaw(self.posix_timestamps,orientation='bottom')})
             self.raw_plot.setAxisItems({'bottom': pg.DateAxisItem(utcOffset=0)})
@@ -638,6 +646,10 @@ class MainWindow(QMainWindow):
 
             self.raw_plot.addItem(scatter_plot_item)
             self.raw_plot.showGrid(x=True, y=True)
+
+            # add raw plot marker on top of data
+            self.raw_plot_marker.setPos(0)
+            self.raw_plot.addItem(self.raw_plot_marker)
 
             # putting the date in the title
             formatted_date = str(self.data_df['t'][0]).split()[0] 
@@ -770,7 +782,6 @@ class MainWindow(QMainWindow):
                     # setting log scale for y
                     # we always need to add mid_plot_marker again since we clear the mid_plot
                     self.mid_plot_marker.setBounds((0, len(x)-1))
-                    self.mid_plot.addItem(self.mid_plot_marker)
                     # not everything tho
                     if not self.markers_added:
                         self.raw_plot_marker.setMovable(True)
@@ -901,6 +912,27 @@ class MainWindow(QMainWindow):
 
                     # Update the plots in order to show the changes in the dilution factor in the single scan plot
                     self.update_plot()
+
+                    # add day markers to plot if data is from multiple days
+                    # find unique days in scan_start_time
+                    unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
+                    self.day_markers = [] # reset day markers list
+                    if len(unique_days) > 1:
+                        for day in unique_days:
+                            # get first index of day
+                            day_index = np.where(self.scan_start_time.astype('datetime64[D]') == day)[0][0]
+                            # create label for marker
+                            month, day = str(day).split('-')[1:]
+                            day_label = f"{day}/{month}"
+                            # create day marker
+                            day_marker = pg.InfiniteLine(pos=day_index, angle=90, movable=False, pen=pg.mkPen(color=(255, 255, 255, 255), width=1), label=day_label, labelOpts={'position': 0.85, 'anchors': [(0.5, 0.2), (0.5, 0.2)], 'color': (255, 255, 255, 255), 'rotateAxis': (1, 0)})
+                            self.mid_plot.addItem(day_marker) # add to plot
+                            self.day_markers.append(day_marker) # add to list
+                        # show / hide day markers based on user setting
+                        self.toggle_day_markers()
+                        
+                    # add mid plot marker on top of data
+                    self.mid_plot.addItem(self.mid_plot_marker)
 
                 else:
                     if self.data_df is None and self.calibration_df is None:
@@ -1535,8 +1567,15 @@ class MainWindow(QMainWindow):
         self.Ninv_avg['UpperDp'] = np.flip(self.bin_lims[1:])
         self.Ninv_avg['LowerDp'] = np.flip(self.bin_lims[:-1])
 
-
-
+    # show / hide middle plot day markers based on user setting
+    def toggle_day_markers(self):
+        if len(self.day_markers) != 0:
+            if self.day_markers_btn.isChecked():
+                for marker in self.day_markers:
+                    marker.show()
+            else:
+                for marker in self.day_markers:
+                    marker.hide()
 
     def print_marker_pos(self,marker):
         marker_x = marker.getXPos()

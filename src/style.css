@@ -45,3 +45,7 @@ QTextEdit {
     background-color: white;
     border-radius: 2px;
 }
+
+QCheckBox {
+    color: white;
+}
