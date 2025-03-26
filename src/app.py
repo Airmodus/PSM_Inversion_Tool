@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.5.5"
+version_number = "0.6.0"
 
 # store file path
 filePath = os.path.realpath(os.path.dirname(__file__))
@@ -52,7 +52,7 @@ class TimeAxisItemForContour(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
         ticks = []
         for value in values:
-            if 0 <= value <= len(self.scan_start_time):
+            if 0 <= value < len(self.scan_start_time):
                 value = self.scan_start_time[int(value)]
                 timestamp = (value - np.datetime64('1970-01-01T00:00:00')) / np.timedelta64(1, 's')
                 value = time.strftime("%H:%M:%S", time.gmtime(timestamp))
@@ -234,8 +234,10 @@ class ExtraFeatures(QWidget):
             print("No calibration file loaded")
     
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, app):
         super().__init__()
+
+        self.application = app # store application reference to variable
 
         self.grey = (46,53,61)
         self.green = (105,255,0)
@@ -274,7 +276,7 @@ class MainWindow(QMainWindow):
 
         # this will be set to True the first time invert_and_plot is called
         self.markers_added = False
-        self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=False,pen='r')
+        self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=False,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
         self.raw_plot_marker.hide()
 
         # - main_layout/graph_layout
@@ -308,7 +310,7 @@ class MainWindow(QMainWindow):
         # main_layout/graph_layout/mid_layout
         self.mid_layout = QGridLayout()
 
-        self.mid_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen='r')
+        self.mid_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
 
         self.mid_plot = pg.PlotWidget(background='w',title="Contour")
         # Get the title label and set its font properties
@@ -360,21 +362,32 @@ class MainWindow(QMainWindow):
         # Add the graph layout to the main layout.
         main_layout.addLayout(self.graph_layout)
 
-        # create plot settings layout TODO
-        plot_settings_layout = QGridLayout() # box or grid?
+        # create plot settings layout
+        plot_settings_layout = QHBoxLayout()
         # create show errors button and add to plot settings layout TODO uncomment when show errors is functional
         #self.show_errors_on_raw_btn = QCheckBox("Show Errors")
         #plot_settings_layout.addWidget(self.show_errors_on_raw_btn, 0, 1)
-        # create space using empty label to align raw avg combobox with mid plot
-        # TODO this is a placeholder, remove when show errors is ready
-        empty_label = QLabel("")
-        plot_settings_layout.addWidget(empty_label, 0, 1)
-        # create average vs. raw combobox and add to plot settings layout
+        # add empty label for alignment TODO replace when show errors is ready
+        plot_settings_layout.addWidget(QLabel(""), stretch=1)
+        # create layout for middle plot settings
+        mid_plot_settings = QHBoxLayout()
+        # create average vs. raw combobox and add to mid_plot_settings layout
         self.avg_vs_raw_combobox = QComboBox()
         self.avg_vs_raw_combobox.setMaximumWidth(100)
         self.avg_vs_raw_combobox.addItems(["Raw","Average"])
         self.avg_vs_raw_combobox.setCurrentIndex(0)
-        plot_settings_layout.addWidget(self.avg_vs_raw_combobox, 0, 2, 1, 2) # set grid span to 2 to handle extra space in the layout
+        mid_plot_settings.addWidget(self.avg_vs_raw_combobox)
+        # create toggle button for day markers and add to mid_plot_settings layout
+        self.day_markers_btn = QCheckBox("Day markers")
+        self.day_markers_btn.setStyleSheet(checkbox_stylesheet)
+        self.day_markers_btn.setChecked(True)
+        self.day_markers_btn.clicked.connect(self.toggle_day_markers)
+        mid_plot_settings.addWidget(self.day_markers_btn)
+        mid_plot_settings.addWidget(QLabel("")) # add empty label for alignment
+        # add mid_plot_settings to plot_settings_layout
+        plot_settings_layout.addLayout(mid_plot_settings, stretch=1)
+        # add empty label for alignment
+        plot_settings_layout.addWidget(QLabel(""), stretch=1)
         # add plot settings layout to main layout
         main_layout.addLayout(plot_settings_layout)
 
@@ -384,23 +397,23 @@ class MainWindow(QMainWindow):
         left_layout = QGridLayout()
 
 
-        self.load_data_btn = QPushButton("Load Data File")
+        self.load_data_btn = QPushButton("Load data files")
         self.load_data_btn.setObjectName("button")
         self.load_data_btn.setFixedWidth(150)
         self.load_data_btn.clicked.connect(self.load_data)
         left_layout.addWidget(self.load_data_btn,0,0)
-        self.data_file_label = QLabel("No file selected")
+        self.data_file_label = QLabel("No files selected")
         self.data_file_label.setObjectName("bordered")
         self.data_file_label.setMaximumWidth(250)
         self.data_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.data_file_label,0,1,1,3)
-        self.refresh_file_btn = QPushButton("Refresh File")
+        self.refresh_file_btn = QPushButton("Refresh files")
         self.refresh_file_btn.setObjectName("button")
         self.refresh_file_btn.setFixedWidth(150)
-        self.refresh_file_btn.clicked.connect(self.refresh_file)
+        self.refresh_file_btn.clicked.connect(self.refresh_files)
         left_layout.addWidget(self.refresh_file_btn,0,4)
 
-        self.load_cal_btn = QPushButton("Load Calibration File")
+        self.load_cal_btn = QPushButton("Load calibration file")
         self.load_cal_btn.setObjectName("button")
         self.load_cal_btn.setFixedWidth(150)
         self.load_cal_btn.clicked.connect(self.load_calibration)
@@ -410,13 +423,18 @@ class MainWindow(QMainWindow):
         self.calibration_file_label.setMaximumWidth(250)
         self.calibration_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.calibration_file_label,1,1,1,3)
+        self.invert_and_plot_btn = QPushButton("Invert and plot")
+        self.invert_and_plot_btn.setObjectName("button")
+        self.invert_and_plot_btn.setFixedWidth(150)
+        self.invert_and_plot_btn.clicked.connect(self.invert_and_plot)
+        left_layout.addWidget(self.invert_and_plot_btn, 1, 4)
 
         # adding a space to row 2
         spacer = QSpacerItem(30, 30)
         left_layout.addItem(spacer,2,0)
 
 
-        data_filtering_label = QLabel("Raw Data Quality Filtering")
+        data_filtering_label = QLabel("Raw data quality filtering")
         left_layout.addWidget(data_filtering_label,3,0)
         self.data_filtering_btn = QCheckBox()
         self.data_filtering_btn.setStyleSheet(checkbox_stylesheet)
@@ -424,14 +442,14 @@ class MainWindow(QMainWindow):
         self.data_filtering_btn.stateChanged.connect(self.checkbox_button_state_changed)
         left_layout.addWidget(self.data_filtering_btn,3,1)
         
-        remove_error_data_label = QLabel("Remove Data With Errors")
+        remove_error_data_label = QLabel("Remove data with errors")
         left_layout.addWidget(remove_error_data_label,4,0)
         self.remove_error_data_btn = QCheckBox()
         self.remove_error_data_btn.setStyleSheet(checkbox_stylesheet)
         self.remove_error_data_btn.stateChanged.connect(self.remove_errors_clicked)
         left_layout.addWidget(self.remove_error_data_btn,4,1)
 
-        avg_n_label = QLabel("Average N.")
+        avg_n_label = QLabel("Average number")
         avg_n_label.setToolTip("Number of data points to average over")
         left_layout.addWidget(avg_n_label,5,0)
         self.avg_n_input = QLineEdit()
@@ -440,7 +458,7 @@ class MainWindow(QMainWindow):
         self.avg_n_input.setValidator(validator)
         left_layout.addWidget(self.avg_n_input,5,1)
 
-        ext_dilution_fac_label = QLabel("External Dilution Factor")
+        ext_dilution_fac_label = QLabel("External dilution factor")
         left_layout.addWidget(ext_dilution_fac_label,6,0)
         # Allow for float values in the external dilution factor input
         dil_validator = QDoubleValidator()
@@ -454,20 +472,20 @@ class MainWindow(QMainWindow):
         self.ext_dilution_fac_input.setValidator(dil_validator)
         left_layout.addWidget(self.ext_dilution_fac_input,6,1)
 
-        self.inversion_method_label = QLabel("Inversion Method")
+        self.inversion_method_label = QLabel("Inversion method")
         left_layout.addWidget(self.inversion_method_label,3,2)
         self.inversion_method_selection = QComboBox()
         self.inversion_method_selection.setFixedWidth(120)
-        self.inversion_method_selection.addItems(["Step Wise"]) # ,"Kernel","EM"
+        self.inversion_method_selection.addItems(["Stepwise"]) # ,"Kernel","EM"
         left_layout.addWidget(self.inversion_method_selection,3,3)
 
-        bin_label = QLabel("Number of Bins")
+        bin_label = QLabel("Number of bins")
         left_layout.addWidget(bin_label,4,2)
         self.bin_selection = QComboBox()
         self.bin_selection.setFixedWidth(60)
         left_layout.addWidget(self.bin_selection,4,3)
 
-        bin_limits_label = QLabel("Bin Limits:")
+        bin_limits_label = QLabel("Bin limits:")
         left_layout.addWidget(bin_limits_label,5,2)
         # label showing bin sizes according to selected amount of bins
         self.bin_limits_text = QLabel()
@@ -487,44 +505,54 @@ class MainWindow(QMainWindow):
         self.error_output.setReadOnly(True)
         right_layout.addWidget(self.error_output,0,0,1,3)
 
-        self.invert_and_plot_btn = QPushButton("Invert and Plot")
-        self.invert_and_plot_btn.setObjectName("button")
-        self.invert_and_plot_btn.setFixedWidth(150)
-        self.invert_and_plot_btn.clicked.connect(self.invert_and_plot)
-        right_layout.addWidget(self.invert_and_plot_btn, 1, 0)
+        right_left_widget = QWidget()
+        right_left_widget.setMaximumWidth(200)
+        right_left_layout = QVBoxLayout()
+        right_left_widget.setLayout(right_left_layout)
+        right_layout.addWidget(right_left_widget,1,0)
 
-        self.save_button = QPushButton("Save")
-        self.save_button.setFixedWidth(150)
+        self.save_button = QPushButton("Save data")
         self.save_button.setObjectName("button")
         self.save_button.clicked.connect(self.save_inversion_data)
-        right_layout.addWidget(self.save_button, 2, 0)
+        right_left_layout.addWidget(self.save_button)
+
+        daily_files = QHBoxLayout()
+        daily_files_label = QLabel("Create daily files")
+        self.daily_files_btn = QCheckBox()
+        self.daily_files_btn.setStyleSheet(checkbox_stylesheet)
+        daily_files.addWidget(daily_files_label)
+        daily_files.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        daily_files.addWidget(self.daily_files_btn)
+        right_left_layout.addLayout(daily_files)
 
         matlab_time = QHBoxLayout()
         matlab_time_label = QLabel("Matlab time format")
         self.matlab_time_btn = QCheckBox()
         self.matlab_time_btn.setStyleSheet(checkbox_stylesheet)
         matlab_time.addWidget(matlab_time_label)
+        matlab_time.addItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
         matlab_time.addWidget(self.matlab_time_btn)
-        right_layout.addLayout(matlab_time, 3, 0)
+        right_left_layout.addLayout(matlab_time)
 
-        # add spacer item between columns
-        right_layout.addItem(QSpacerItem(0, 0), 1, 1)
+        right_right_widget = QWidget()
+        right_right_widget.setMaximumWidth(200)
+        right_right_layout = QVBoxLayout()
+        right_right_widget.setLayout(right_right_layout)
+        right_layout.addWidget(right_right_widget,1,2)
 
         # create widgets for NAIS data loading
         self.nais_data_label = QLabel("No NAIS data file selected")
         self.nais_data_label.setObjectName("bordered")
-        self.nais_data_label.setMaximumWidth(300)
         self.nais_data_label.setAlignment(Qt.AlignRight)
-        right_layout.addWidget(self.nais_data_label, 1, 2)
+        right_right_layout.addWidget(self.nais_data_label)
         self.nais_data_btn = QPushButton("Load NAIS data")
         self.nais_data_btn.setObjectName("button")
-        self.nais_data_btn.setMaximumWidth(300)
         self.nais_data_btn.clicked.connect(self.load_nais_data)
-        right_layout.addWidget(self.nais_data_btn, 2, 2)
+        right_right_layout.addWidget(self.nais_data_btn)
 
         # create plot calibration file button
-        self.plot_calibration_file_btn = QPushButton("Plot Calibration File")
-        right_layout.addWidget(self.plot_calibration_file_btn, 3, 2)
+        self.plot_calibration_file_btn = QPushButton("Plot calibration file")
+        right_right_layout.addWidget(self.plot_calibration_file_btn)
 
         controls_layout.addLayout(right_layout)
         controls_layout.setStretchFactor(left_layout, 1)
@@ -547,6 +575,10 @@ class MainWindow(QMainWindow):
         self.data_df = None
         self.calibration_df = None
         self.nais_data = None
+        self.current_filenames = None
+        self.Ninv = None
+        self.Ninv_avg = None
+        self.day_markers = []
 
         self.extra_features = ExtraFeatures()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
@@ -585,28 +617,28 @@ class MainWindow(QMainWindow):
             concentration_values = self.data_df['concentration']
             satflow_values = self.data_df['satflow']
 
-
             # Create a colormap
             cm = pg.colormap.get('viridis')
-            
             # normalize satflow to range 0,1 for colormap
             norm_satflow = (satflow_values - satflow_values.min()) / (satflow_values.max() - satflow_values.min())
-
-            # normalized concentration to colors
-            colors = cm.map(norm_satflow, 'qcolor')
-            # convert colors to brushes
+            # round values to 1 decimal to reduce draw time
+            norm_satflow = norm_satflow.round(1)
+            # create brush color for each normalized satflow level
+            norm_satflow_levels = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0]
+            colors = cm.map(norm_satflow_levels, 'qcolor')
             brushes = [pg.mkBrush(color) for color in colors]
-            # making an outline to points
-            outline_pen = pg.mkPen(color=(255, 255, 255), width=.2)
 
-            self.raw_plot_marker.setPos(0)
+            # Create ScatterPlotItem
+            scatter_plot_item = pg.ScatterPlotItem(symbol='o', pxMode=True, pen=pg.mkPen(color=(255, 255, 255), width=.2))
+            # add points one normalized satflow level at a time
+            for i in range(len(norm_satflow_levels)):
+                # get indices matching current normalized satflow level
+                indices = np.where(norm_satflow == norm_satflow_levels[i])[0].tolist()
+                # add points with matching indices and brush color
+                scatter_plot_item.addPoints(self.posix_timestamps[indices], concentration_values[indices], brush=brushes[i])
 
-            self.raw_plot.addItem(self.raw_plot_marker)
-            # Create the ScatterPlotItem and set colors
-            scatter_plot_item = pg.ScatterPlotItem(self.posix_timestamps, concentration_values, symbol='o', pxMode=True, pen=outline_pen)
-            scatter_plot_item.setBrush(brushes)
-
-            self.raw_plot.setAxisItems({'bottom': TimeAxisItemForRaw(self.posix_timestamps,orientation='bottom')})
+            #self.raw_plot.setAxisItems({'bottom': TimeAxisItemForRaw(self.posix_timestamps,orientation='bottom')})
+            self.raw_plot.setAxisItems({'bottom': pg.DateAxisItem(utcOffset=0)})
             #self.raw_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
             self.raw_plot.getAxis('bottom').setGrid(0)
             self.raw_plot.getAxis('bottom').enableAutoSIPrefix(False) # disable auto SI prefix
@@ -615,14 +647,23 @@ class MainWindow(QMainWindow):
             self.raw_plot.addItem(scatter_plot_item)
             self.raw_plot.showGrid(x=True, y=True)
 
+            # add raw plot marker on top of data
+            self.raw_plot_marker.setPos(0)
+            self.raw_plot.addItem(self.raw_plot_marker)
+
             # putting the date in the title
             formatted_date = str(self.data_df['t'][0]).split()[0] 
             year, month, day = formatted_date.split('-')
-            formatted_date = f'{day}/{month}/{year}'
-            print(formatted_date)
+            # if data is from multiple days, add the last day to the title
+            end_date = str(self.data_df['t'].iloc[-1]).split()[0]
+            if end_date != formatted_date:
+                end_year, end_month, end_day = end_date.split('-')
+                formatted_date = f'{day}/{month}/{year} - {end_day}/{end_month}/{end_year}'
+            else:
+                formatted_date = f'{day}/{month}/{year}'
             # setting the raw plot title
-            self.raw_plot.setTitle(f"Raw Data - {formatted_date}", size="9pt")
-            self.mid_plot.setTitle(f"Inverted size distribution - {formatted_date}", size="9pt")
+            self.raw_plot.setTitle(f"Raw Data {formatted_date}", size="9pt")
+            self.mid_plot.setTitle(f"Inverted size distribution {formatted_date}", size="9pt")
 
             # Create color bar plot
             min_satflow = satflow_values.min()
@@ -668,216 +709,249 @@ class MainWindow(QMainWindow):
 
     def invert_and_plot(self, **kwargs):
 
-        if self.inversion_method_selection.currentText() == "Step Wise":
+        # set cursor to loading
+        self.application.setOverrideCursor(Qt.WaitCursor)
+
+        try:
+            if self.inversion_method_selection.currentText() == "Stepwise":
 
 
-            """
-            Inverts the data and plots data on all three graphs,
-            """
-            if self.data_df is not None and self.calibration_df is not None:
+                """
+                Inverts the data and plots data on all three graphs,
+                """
+                if self.data_df is not None and self.calibration_df is not None:
 
-                # Inversion --------------------------------------------------------
+                    # Inversion --------------------------------------------------------
 
-                # update the measurement data by running it through inst_calib function
-                self.calibration_df, self.data_df  = self.inst_calib()
+                    # update the measurement data by running it through inst_calib function
+                    self.calibration_df, self.data_df  = self.inst_calib()
 
-                # if keyword argument 'bin_limits' was given, pass it to bin_data
-                if 'bin_limits' in kwargs:
-                    self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits = kwargs['bin_limits'])
-                else:
-                    # Bin the concentration data, set the number of bins
-                    self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data()
+                    # if keyword argument 'bin_limits' was given, pass it to bin_data
+                    if 'bin_limits' in kwargs:
+                        self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits = kwargs['bin_limits'])
+                    else:
+                        # Bin the concentration data, set the number of bins
+                        self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data()
 
-                Sn = self.avg_n_input.text()
-                if Sn == "":
-                    Sn = 5
-                else:
-                    Sn = int(Sn)
-                self.avg_n_input.setText(str(Sn))
-                
-                # Averaging over scans
-                self.Nbinned_avg = self.averagedata(Sn)
-
-                # Invert the data and generate self.Ninv and self.Ninv_avg
-                self.step_inversion()
-
-                # Convert Timestamp objects to POSIX timestamps
-                self.posix_timestamps = self.data_df['t'].apply(lambda x: x.timestamp())
-
-
-                # Contour Plot -----------------------------------------------------
-                self.mid_plot.clear()
-
-                # Creates the middle contour plot  
-                x = self.scan_start_time
-                #x = (x - np.datetime64('1970-01-01T00:00:00'))
-                # adding bottom axis to the plot
-                self.mid_plot.getPlotItem().setAxisItems({'bottom': TimeAxisItemForContour(self.mid_plot_marker,x,orientation='bottom')})
-                self.mid_plot.setLabel('bottom','Time')
-                self.mid_plot.setLabel('left', "Diameter [nm]")
-                # Set the y range to the min and max of the diameter from the bin lims
-                self.mid_plot.setYRange(np.min(self.Dplot),np.max(self.Dplot))
-
-                # create ticks for left axis
-                bin_ticks = []
-                for i in range(len(self.Dplot)):
-                    # add tick as tuple (value, string)
-                    bin_ticks.append((len(self.Dplot) - (i + 1), str(round(self.Dplot[i], 2))))
-                print("bin_ticks", bin_ticks)
-                # set left axis ticks
-                # https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/axisitem.html#pyqtgraph.AxisItem.setTicks
-                self.mid_plot.getAxis('left').setTicks([bin_ticks])
-
-                #self.mid_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
-                # this is needed to show the ticks inside the plot,
-                # it just removes vertical grid from the plot...
-                self.mid_plot.getPlotItem().getAxis('bottom').setGrid(0)
-
-
-                # setting log scale for y
-                # we always need to add mid_plot_marker again since we clear the mid_plot
-                self.mid_plot_marker.setBounds((0, len(x)-1))
-                self.mid_plot.addItem(self.mid_plot_marker)
-                # not everything tho
-                if not self.markers_added:
-                    self.raw_plot_marker.setMovable(True)
-                    self.raw_plot_marker.show()
-                    self.raw_plot_marker.setPos(self.posix_timestamps.iloc[0])
-                    self.raw_plot_marker.setBounds((self.posix_timestamps.iloc[0], self.posix_timestamps.iloc[-1]))
-                    self.raw_plot_marker.sigPositionChanged.connect(self.update_plot)
-                    self.raw_plot_marker.sigPositionChanged.connect(self.update_plot_title)
-                    self.raw_plot_marker.sigPositionChanged.connect(self.sync_markers)
+                    Sn = self.avg_n_input.text()
+                    if Sn == "":
+                        Sn = 5
+                    else:
+                        Sn = int(Sn)
+                    self.avg_n_input.setText(str(Sn))
                     
-                    # removed connection to update_plot and update_plot_title since these are already called through sync_markers -> raw_plot_marker.sigPositionChanged
-                    self.mid_plot_marker.setPos(0)
-                    #self.mid_plot_marker.sigPositionChanged.connect(self.update_plot)
-                    #self.mid_plot_marker.sigPositionChanged.connect(self.update_plot_title)
-                    self.mid_plot_marker.sigPositionChanged.connect(self.sync_markers)
+                    # Averaging over scans
+                    self.Nbinned_avg = self.averagedata(Sn)
 
-                    self.markers_added = True
+                    # Invert the data and generate self.Ninv and self.Ninv_avg
+                    self.step_inversion()
 
-                    self.update_plot_title()
+                    # Convert Timestamp objects to POSIX timestamps
+                    self.posix_timestamps = self.data_df['t'].apply(lambda x: x.timestamp())
+
+
+                    # Contour Plot -----------------------------------------------------
+                    self.mid_plot.clear()
+
+                    # Creates the middle contour plot  
+                    x = self.scan_start_time
+                    #x = (x - np.datetime64('1970-01-01T00:00:00'))
+                    # adding bottom axis to the plot
+                    self.mid_plot.getPlotItem().setAxisItems({'bottom': TimeAxisItemForContour(self.mid_plot_marker,x,orientation='bottom')})
+                    self.mid_plot.setLabel('bottom','Time')
+                    self.mid_plot.setLabel('left', "Diameter [nm]")
+                    # Set the y range to the min and max of the diameter from the bin lims
+                    self.mid_plot.setYRange(np.min(self.Dplot),np.max(self.Dplot))
+
+                    # create ticks for left axis
+                    bin_ticks = []
+                    for i in range(len(self.Dplot)):
+                        # add tick as tuple (value, string)
+                        bin_ticks.append((len(self.Dplot) - (i + 1), str(round(self.Dplot[i], 2))))
+                    print("bin_ticks", bin_ticks)
+                    # set left axis ticks
+                    # https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/axisitem.html#pyqtgraph.AxisItem.setTicks
+                    self.mid_plot.getAxis('left').setTicks([bin_ticks])
+
+                    #self.mid_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
+                    # this is needed to show the ticks inside the plot,
+                    # it just removes vertical grid from the plot...
+                    self.mid_plot.getPlotItem().getAxis('bottom').setGrid(0)
+
+
+                    # setting log scale for y
+                    # we always need to add mid_plot_marker again since we clear the mid_plot
+                    self.mid_plot_marker.setBounds((0, len(x)-1))
+                    # not everything tho
+                    if not self.markers_added:
+                        self.raw_plot_marker.setMovable(True)
+                        self.raw_plot_marker.show()
+                        self.raw_plot_marker.setPos(self.posix_timestamps.iloc[0])
+                        self.raw_plot_marker.setBounds((self.posix_timestamps.iloc[0], self.posix_timestamps.iloc[-1]))
+                        self.raw_plot_marker.sigPositionChanged.connect(self.update_plot)
+                        self.raw_plot_marker.sigPositionChanged.connect(self.update_plot_title)
+                        self.raw_plot_marker.sigPositionChanged.connect(self.sync_markers)
+                        
+                        # removed connection to update_plot and update_plot_title since these are already called through sync_markers -> raw_plot_marker.sigPositionChanged
+                        self.mid_plot_marker.setPos(0)
+                        #self.mid_plot_marker.sigPositionChanged.connect(self.update_plot)
+                        #self.mid_plot_marker.sigPositionChanged.connect(self.update_plot_title)
+                        self.mid_plot_marker.sigPositionChanged.connect(self.sync_markers)
+
+                        self.markers_added = True
+
+                        self.update_plot_title()
+                        self.update_plot()
+
+
+                    # Convert numpy.datetime64 array to a POSIX timestamp array
+                    skip = self.n_len_metadata
+                    y = self.Dplot
+                    print("y", y)     
+                    if self.avg_vs_raw_combobox.currentText() == 'Raw':
+                        z = np.log10(self.Ninv.iloc[:, skip:].values)
+                    else: # Averaged
+                        z = np.log10(self.Ninv_avg.iloc[:, skip:].values)
+                    # flip the y axis
+                    z = np.flip(z)
+                    # flip the x axis
+                    for i in range(len(z)):
+                        z[i] = np.flip(z[i])
+
+                    # # temporarily replace nan and inf values with zero for min/max calculation
+                    # z_no_nan = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
+                    # min_z = np.min(z_no_nan)
+                    # max_z = np.max(z_no_nan)
+
+                    # replace nan and inf values with zero
+                    z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
+                    # set floor value: change all values below 0.1 to 0.1
+                    z[z < 0.1] = 0.1
+                    min_z = np.min(z)
+                    max_z = np.max(z)
+                    
+                    # round the max value to the next power of ten
+                    max_z = np.ceil(max_z)
+                    min_z = np.floor(min_z)
+
+                    # Scale back to correct concentration
+                    z_normalized = (z-min_z)/(max_z - min_z)
+
+                    # Create the color map
+                    cmap = pg.colormap.get('CET-R4')
+
+                    # # Set the position of the image
+                    # # TODO: All of this is a mess, but this is the place to adjust the scales.
+                    # # HOW ABOUT LOG STUFF? Is the bins even correc? Most likely not
+                    # tr = QTransform()  # prepare ImageItem transformation:
+                    # # Get the number of bins and assing it to nbin
+                    # nbin = len(self.Dplot)-1
+                    # max_size = np.nanmax(y)
+                    # min_size = np.nanmin(y)
+                    # print(min_size, max_size)  
+                    # len_range = max_size-min_size
+                    # pixel_size = len_range/nbin
+
+                    # tr.scale(1, len_range/nbin)       # scale horizontal and vertical axes
+                    # tr.translate(0, min_size/pixel_size) # move 3x3 image to locate center at axis origin
+
+                    self.image_item = pg.ImageItem(image=z_normalized.T)
+                    #self.image_item.setTransform(tr)
+                    self.mid_plot.addItem(self.image_item)
+                    #self.mid_plot.setYRange(np.min(y),np.max(y))
+                    # Set range for the colormap
+                    self.image_item.setLevels([0, 1])
+
+                    if cmap is not None:
+                        self.image_item.setLookupTable(cmap.getLookupTable(0.0, 1.0, 256))
+
+                    # Generate new x and y arrays with the correct scaling
+                    x = pd.date_range(start=x[0], end=x[-1], periods=z_normalized.shape[1])
+                    y = np.linspace(y[0], y[-1], z_normalized.shape[0])
+
+                    # Set the position of the image
+                    #self.image_item.setPos(0,np.min(y))
+
+                    # autoscale mid_plot
+                    self.mid_plot.enableAutoRange(axis='y', enable=True)
+
+                    # NEW
+                    #-------------------------------------------------------------------
+
+                    # Create color bar plot
+                    axis = pg.AxisItem('right')
+                    # Map a value x from one range to another
+                    def map_range(x, in_min, in_max, out_min, out_max):
+                        return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+                    # Calculate the labels for the axis
+                    #ticks = [(map_range(i, 0, 4, 0, 100), f"{min_z+ (max_z - min_z) * (i / 4):.2f}") for i in range(5)]
+                    n_ticks = int(max_z-min_z)
+                    ticks = [(map_range(i, 0, n_ticks, 0, 100), f"{10**(min_z+ (max_z - min_z) * (i / n_ticks)):.0e}") for i in range(n_ticks+1)]
+
+                    # Set the labels for the axis
+                    axis.setTicks([ticks])
+
+                    self.mid_color_bar_plot.setAxisItems({'right':axis})
+                    # Set the range of the color bar plot to match the color bar
+                    self.mid_color_bar_plot.setRange(yRange=[0, 100])
+                    
+                    # Create color bar data
+                    color_bar_data = np.repeat(np.linspace(0, 1, 100).reshape(-1, 1), 10, axis=1).T
+
+                    # change the label offset
+                    #self.mid_color_bar_plot.getAxis('right').setStyle(tickTextOffset=-15)
+
+                    # Create color bar image item
+                    if cmap is not None:
+                        color_bar = pg.ImageItem(color_bar_data, lut=cmap.getLookupTable())
+                        self.mid_color_bar_plot.addItem(color_bar)
+
+                    # Add label to the color bar plot
+                    # self.mid_color_bar_plot.setLabel('left', "dN/dlogDp [cm-3]")
+
+                    # Update the plots in order to show the changes in the dilution factor in the single scan plot
                     self.update_plot()
 
+                    # add day markers to plot if data is from multiple days
+                    # find unique days in scan_start_time
+                    unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
+                    self.day_markers = [] # reset day markers list
+                    if len(unique_days) > 1:
+                        for day in unique_days:
+                            # get first index of day
+                            day_index = np.where(self.scan_start_time.astype('datetime64[D]') == day)[0][0]
+                            # create label for marker
+                            month, day = str(day).split('-')[1:]
+                            day_label = f"{day}/{month}"
+                            # create day marker
+                            day_marker = pg.InfiniteLine(pos=day_index, angle=90, movable=False, pen=pg.mkPen(color=(255, 255, 255, 255), width=1), label=day_label, labelOpts={'position': 0.85, 'anchors': [(0.5, 0.2), (0.5, 0.2)], 'color': (255, 255, 255, 255), 'rotateAxis': (1, 0)})
+                            self.mid_plot.addItem(day_marker) # add to plot
+                            self.day_markers.append(day_marker) # add to list
+                        # show / hide day markers based on user setting
+                        self.toggle_day_markers()
+                        
+                    # add mid plot marker on top of data
+                    self.mid_plot.addItem(self.mid_plot_marker)
 
-                # Convert numpy.datetime64 array to a POSIX timestamp array
-                skip = self.n_len_metadata
-                y = self.Dplot
-                print("y", y)     
-                if self.avg_vs_raw_combobox.currentText() == 'Raw':
-                    z = np.log10(self.Ninv.iloc[:, skip:].values)
-                else: # Averaged
-                    z = np.log10(self.Ninv_avg.iloc[:, skip:].values)
-                # flip the y axis
-                z = np.flip(z)
-                # flip the x axis
-                for i in range(len(z)):
-                    z[i] = np.flip(z[i])
-
-                # # temporarily replace nan and inf values with zero for min/max calculation
-                # z_no_nan = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
-                # min_z = np.min(z_no_nan)
-                # max_z = np.max(z_no_nan)
-
-                # replace nan and inf values with zero
-                z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
-                # set floor value: change all values below 0.1 to 0.1
-                z[z < 0.1] = 0.1
-                min_z = np.min(z)
-                max_z = np.max(z)
-                
-                # round the max value to the next power of ten
-                max_z = np.ceil(max_z)
-                min_z = np.floor(min_z)
-
-                # Scale back to correct concentration
-                z_normalized = (z-min_z)/(max_z - min_z)
-
-                # Create the color map
-                cmap = pg.colormap.get('CET-R4')
-
-                # # Set the position of the image
-                # # TODO: All of this is a mess, but this is the place to adjust the scales.
-                # # HOW ABOUT LOG STUFF? Is the bins even correc? Most likely not
-                # tr = QTransform()  # prepare ImageItem transformation:
-                # # Get the number of bins and assing it to nbin
-                # nbin = len(self.Dplot)-1
-                # max_size = np.nanmax(y)
-                # min_size = np.nanmin(y)
-                # print(min_size, max_size)  
-                # len_range = max_size-min_size
-                # pixel_size = len_range/nbin
-
-                # tr.scale(1, len_range/nbin)       # scale horizontal and vertical axes
-                # tr.translate(0, min_size/pixel_size) # move 3x3 image to locate center at axis origin
-
-                self.image_item = pg.ImageItem(image=z_normalized.T)
-                #self.image_item.setTransform(tr)
-                self.mid_plot.addItem(self.image_item)
-                #self.mid_plot.setYRange(np.min(y),np.max(y))
-                # Set range for the colormap
-                self.image_item.setLevels([0, 1])
-
-                if cmap is not None:
-                    self.image_item.setLookupTable(cmap.getLookupTable(0.0, 1.0, 256))
-
-                # Generate new x and y arrays with the correct scaling
-                x = pd.date_range(start=x[0], end=x[-1], periods=z_normalized.shape[1])
-                y = np.linspace(y[0], y[-1], z_normalized.shape[0])
-
-                # Set the position of the image
-                #self.image_item.setPos(0,np.min(y))
-
-                # autoscale mid_plot
-                self.mid_plot.enableAutoRange(axis='y', enable=True)
-
-                # NEW
-                #-------------------------------------------------------------------
-
-                # Create color bar plot
-                axis = pg.AxisItem('right')
-                # Map a value x from one range to another
-                def map_range(x, in_min, in_max, out_min, out_max):
-                    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
-
-                # Calculate the labels for the axis
-                #ticks = [(map_range(i, 0, 4, 0, 100), f"{min_z+ (max_z - min_z) * (i / 4):.2f}") for i in range(5)]
-                n_ticks = int(max_z-min_z)
-                ticks = [(map_range(i, 0, n_ticks, 0, 100), f"{10**(min_z+ (max_z - min_z) * (i / n_ticks)):.0e}") for i in range(n_ticks+1)]
-
-                # Set the labels for the axis
-                axis.setTicks([ticks])
-
-                self.mid_color_bar_plot.setAxisItems({'right':axis})
-                # Set the range of the color bar plot to match the color bar
-                self.mid_color_bar_plot.setRange(yRange=[0, 100])
-                
-                # Create color bar data
-                color_bar_data = np.repeat(np.linspace(0, 1, 100).reshape(-1, 1), 10, axis=1).T
-
-                # change the label offset
-                #self.mid_color_bar_plot.getAxis('right').setStyle(tickTextOffset=-15)
-
-                # Create color bar image item
-                if cmap is not None:
-                    color_bar = pg.ImageItem(color_bar_data, lut=cmap.getLookupTable())
-                    self.mid_color_bar_plot.addItem(color_bar)
-
-                # Add label to the color bar plot
-                # self.mid_color_bar_plot.setLabel('left', "dN/dlogDp [cm-3]")
-
-            else:
-                if self.data_df is None and self.calibration_df is None:
-                    self.error_output.append("No data to plot")
-                elif self.calibration_df is None:
-                    self.error_output.append("No calibration file selected")
                 else:
-                    self.error_output.append("No data file selected")
-        else:
-            self.error_output.append("Choose inversion method first")
+                    if self.data_df is None and self.calibration_df is None:
+                        self.error_output.append("No data to plot")
+                    elif self.calibration_df is None:
+                        self.error_output.append("No calibration file selected")
+                    else:
+                        self.error_output.append("No data file selected")
+            else:
+                self.error_output.append("Choose inversion method first")
+
+            # restore cursor to normal
+            self.application.restoreOverrideCursor()
         
-        # Update the plots in order to show the changes in the dilution factor in the single scan plot
-        self.update_plot()
+        except Exception as e:
+            traceback.print_exc()
+            self.error_output.append("Error inverting data:")
+            self.error_output.append(str(e))
+            self.application.restoreOverrideCursor() # restore cursor to normal
     
     def read_file(self):
         # determine device model by checking if "YYYY.MM.DD hh:mm:ss" is in file header
@@ -885,86 +959,112 @@ class MainWindow(QMainWindow):
             # check if "YYYY.MM.DD hh:mm:ss" is in the first line of the file
             if "YYYY.MM.DD hh:mm:ss" in file.readline(): # PSM 2.0 / Retrofit
                 print("2.0 / Retrofit")
+                # set model if not set (1st file)
+                if self.model is None:
+                    self.model = 'PSM2.0'
+                    self.model_label.setText(f"Instrument Model: {self.model}")
+                    self.update_bin_selection(self.model) # update bin selection options according to device model
+                # if model doesn't match current file, raise error
+                elif self.model != 'PSM2.0':
+                    raise Exception("Mixed data files: PSM 2.0 and A10")
                 # set parameters according to PSM 2.0
-                self.model = 'PSM2.0'
                 self.n_len_metadata = 7
                 self.CPC_time_lag = -3
             else: # A10
                 print("A10")
+                # set model if not set (1st file)
+                if self.model is None:
+                    self.model = 'A10'
+                    self.model_label.setText(f"Instrument Model: {self.model}")
+                    self.update_bin_selection(self.model) # update bin selection options according to device model
+                # if model doesn't match current file, raise error
+                elif self.model != 'A10':
+                    raise Exception("Mixed data files: PSM 2.0 and A10")
                 # set parameters according to A10
-                self.model = 'A10'
                 self.n_len_metadata = 7 # TODO: check if correct, not sure about normal PSM
                 self.CPC_time_lag = -3 # Same here, check this number
 
         # Read the temporary file into a DataFrame and rename relevant columns
         if self.model == 'PSM2.0':
             # include header if device is PSM 2.0
-            self.data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', header=0) # skiprows=1, header=None)
+            current_data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', header=0) # skiprows=1, header=None)
             # rename columns by old names
-            self.data_df.rename(columns={"Concentration from PSM (1/cm3)": "concentration", "Saturator flow rate (lpm)": "satflow", "Dilution correction factor": "dilution", "CPC system status errors (hex)": "CPC_system_status_error", "PSM system status errors (hex)": "PSM_system_status_error"}, inplace=True)
+            current_data_df.rename(columns={"Concentration from PSM (1/cm3)": "concentration", "Saturator flow rate (lpm)": "satflow", "Dilution correction factor": "dilution", "CPC system status errors (hex)": "CPC_system_status_error", "PSM system status errors (hex)": "PSM_system_status_error"}, inplace=True)
             # convert time column data to datetime, PSM2.0 format: YYYY.MM.DD hh:mm:ss
-            self.data_df['t'] = pd.to_datetime(self.data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
+            current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
         elif self.model == 'A10':
             # skip header if device is A10
-            self.data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', skiprows=1, header=None)
+            current_data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', skiprows=1, header=None)
             # rename columns by index
-            self.data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 44: 'CPC_system_status_error', 46: 'PSM_system_status_error'}, inplace=True)
+            current_data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 44: 'CPC_system_status_error', 46: 'PSM_system_status_error'}, inplace=True)
             # convert time column data to datetime, A10 format: DD.MM.YYYY hh:mm:ss
-            self.data_df['t'] = pd.to_datetime(self.data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
-        
-        # update bin selection options according to device model
-        self.update_bin_selection(self.model)
-
-        # display PSM and CPC errors
-        self.display_errors(self.data_df)
+            current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
 
         # Apply lag correction to concentration columns (i.e. shift the concentration values up by 4)
-        self.data_df['concentration'] = self.data_df['concentration'].shift(self.CPC_time_lag)
+        current_data_df['concentration'] = current_data_df['concentration'].shift(self.CPC_time_lag)
+
+        # concatenate dataframe to self.data_df
+        self.data_df = pd.concat([self.data_df, current_data_df], ignore_index=True)
 
         self.avg_n_input.setText("5")
         self.ext_dilution_fac_input.setText("1")
-        self.model_label.setText(f"Instrument Model: {self.model}")
 
-    # refreshes data by reloading current file
-    def refresh_file(self):
-        # read current file name
-        current_filename = self.data_file_label.text()
-        # check if file name is empty
-        if current_filename == "No file selected":
-            self.error_output.append("No file selected")
-        else: # load data with current_filename
-            print("Refreshing file: " + current_filename)
-            self.load_data(current_filename=current_filename)
+    # refreshes data by reloading current files
+    def refresh_files(self):
+        if self.current_filenames is not None:
+            self.load_data(current_filenames=self.current_filenames)
+        else:
+            self.error_output.setText("No files selected.")
                   
     def load_data(self, **kwargs):
 
-        # if keyword argument 'current_filename' was given, use it
-        if 'current_filename' in kwargs:
-            file_name = kwargs['current_filename']
+        # if keyword argument 'current_filenames' was given, use it
+        if 'current_filenames' in kwargs:
+            file_names = kwargs['current_filenames']
         # if no keyword argument was given, open file dialog
         else:
             options = QFileDialog.Option.ReadOnly
-            file_name, _ = QFileDialog.getOpenFileName(self, "Load Data File", "", "dat Files (*.dat);;All Files (*)", options=options)
-            """
-            file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/SMEAR3_psm2.0_20230509.dat"
-            """
-        if file_name:
+            file_names, _ = QFileDialog.getOpenFileNames(self, "Load data files", "", "PSM data files (*PSM*.dat);;All data files (*.dat);;All files (*)", options=options)
+        if file_names:
+            # TODO if many files, ask user for confirmation before loading
+            # set cursor to loading
+            self.application.setOverrideCursor(Qt.WaitCursor)
             try:
                 self.error_output.clear() # clear error output text box
-                self.data_file_label.setText(file_name)
-                self.data_file_label.setToolTip(file_name)
-                # Create a temporary file and copy the contents of the selected file
-                self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
-                shutil.copy(file_name, self.temp_data_file.name)
+                self.current_filenames = file_names # store file names to variable
 
-                self.read_file() # read file contents and create dataframe
+                # set data file label information
+                if len(file_names) == 1:
+                    self.data_file_label.setText(file_names[0])
+                    self.data_file_label.setToolTip(file_names[0])
+                else:
+                    self.data_file_label.setText(f"{len(file_names)} files loaded, hover to see names")
+                    self.data_file_label.setToolTip("\n".join(file_names))
+                
+                self.data_df = pd.DataFrame() # reset data_df
+                self.model = None # reset device model variable
+                self.Ninv = None # reset inversion dataframe
+                self.Ninv_avg = None # reset inversion average dataframe
+                # read each file and append to dataframe
+                for file_name in file_names:
+                    # Create a temporary file and copy the contents of current file
+                    self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
+                    shutil.copy(file_name, self.temp_data_file.name)
+                    # read file contents and concatenate to data_df dataframe
+                    self.read_file()
+                
+                self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
+
+                # restore cursor to normal
+                self.application.restoreOverrideCursor()
+            
             except Exception as e:
-                print("Error loading data file")
-                print(e)
-                self.error_output.append("Error loading data file:")
+                traceback.print_exc()
+                self.error_output.append("Error loading data files:")
                 self.error_output.append(str(e))
+                self.application.restoreOverrideCursor() # restore cursor to normal
 
             # Replace zero or negative values with a small positive number
             #self.data_df['concentration'] = self.data_df['concentration'].apply(lambda x: 1e-6 if x <= 0 else x)
@@ -981,7 +1081,7 @@ class MainWindow(QMainWindow):
 
         
     def load_calibration(self):
-        file_name, _ = QFileDialog.getOpenFileName(self, "Load Calibration File", "", "Text Files (*.txt);;All Files (*)")
+        file_name, _ = QFileDialog.getOpenFileName(self, "Load calibration file", "", "Text files (*.txt);;All files (*)")
         self.cal_file_name = file_name
         """
         file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/CF_ALL_ALT.txt"
@@ -1039,7 +1139,7 @@ class MainWindow(QMainWindow):
         _date,_time = raw_time.split('T')
         _year,_month,_day = _date.split('-')
         _hour,_minute,_second = _time.split(':')
-        formatted_time = f"{_day}.{_month}.{_year} - {_hour}:{_minute}:{_second}"
+        formatted_time = f"{_day}/{_month}/{_year} {_hour}:{_minute}:{_second}"
         self.size_dist_plot.setTitle(f"Scan Start Time: {formatted_time}", size="9pt")
 
         # if nais data has been loaded, convert scan_start_time to datetime object and send to update_nais()
@@ -1065,7 +1165,7 @@ class MainWindow(QMainWindow):
 
     def load_nais_data(self):
         options = QFileDialog.Option.ReadOnly
-        file_name, _ = QFileDialog.getOpenFileName(self, "Load NAIS Data File", "", "txt Files (*.txt);;All Files (*)", options=options)
+        file_name, _ = QFileDialog.getOpenFileName(self, "Load NAIS data file", "", "Text files (*.txt);;All files (*)", options=options)
         if file_name:
             try:
                 # read NAIS file into dataframe
@@ -1088,14 +1188,16 @@ class MainWindow(QMainWindow):
             self.error_output.append("PSM errors:")
             for error in PSM_errors:
                 self.error_output.append(error)
+            self.error_output.append("")
         else:
-            self.error_output.append("No PSM errors.")
+            self.error_output.append("No PSM errors.\n")
         if CPC_errors:
-            self.error_output.append("\nCPC errors:")
+            self.error_output.append("CPC errors:")
             for error in CPC_errors:
                 self.error_output.append(error)
+            self.error_output.append("")
         else:
-            self.error_output.append("\nNo CPC errors.")
+            self.error_output.append("No CPC errors.\n")
 
     def averagedata(self,Sn):
         # Averaging over scans
@@ -1111,7 +1213,7 @@ class MainWindow(QMainWindow):
                 temp = temp.rolling(Sn, min_periods=1,axis = 1 ).mean()
                 temp['bins'] = self.Nbinned['bins']
                 self.Nbinned_avg = self.Nbinned_avg.merge(temp, how = 'left',on='bins')
-                self.error_output.append("Averaging over " + str(Sn) + " scans")
+                #self.error_output.append("Averaging over " + str(Sn) + " scans")
             else:
                 messageStatus = 1
                 message = "Can't average over one scan, please increase the number of scans to be averaged."
@@ -1155,7 +1257,7 @@ class MainWindow(QMainWindow):
     # when button is clicked, reload data to apply changes
     def remove_errors_clicked(self):
         if self.data_df is not None:
-            self.refresh_file()
+            self.refresh_files()
 
     # Remove data with errors if button is checked
     def remove_data_with_errors(self):
@@ -1166,6 +1268,8 @@ class MainWindow(QMainWindow):
                 self.data_df = self.data_df[self.data_df['PSM_system_status_error'] == '0000000000000000']
                 # remove rows with CPC errors
                 self.data_df = self.data_df[self.data_df['CPC_system_status_error'] == '0000000000000000']
+                # reset dataframe index
+                self.data_df.reset_index(drop=True, inplace=True)
 
     def check_instrument_errors(self, df):
 
@@ -1463,8 +1567,15 @@ class MainWindow(QMainWindow):
         self.Ninv_avg['UpperDp'] = np.flip(self.bin_lims[1:])
         self.Ninv_avg['LowerDp'] = np.flip(self.bin_lims[:-1])
 
-
-
+    # show / hide middle plot day markers based on user setting
+    def toggle_day_markers(self):
+        if len(self.day_markers) != 0:
+            if self.day_markers_btn.isChecked():
+                for marker in self.day_markers:
+                    marker.show()
+            else:
+                for marker in self.day_markers:
+                    marker.hide()
 
     def print_marker_pos(self,marker):
         marker_x = marker.getXPos()
@@ -1526,78 +1637,141 @@ class MainWindow(QMainWindow):
                 bin_limits_text += str(bin_limit) + " "
             self.bin_limits_text.setText(bin_limits_text)
 
+    # save inversion data to a file or multiple files
     def save_inversion_data(self):
+        # make sure inversion data exists
+        if self.Ninv is None:
+            self.error_output.append("No inverted data to save")
+            return
         print("Saving inverted data...")
-        # Save the inverted data to a file (Ninv)
-        options = QFileDialog.Option.ReadOnly
-        # suggest filename if a file is selected
-        if self.data_file_label.text() not in ["", "No file selected"]:
-            # get filename, remove file ending (.dat) and add '_dNdlogDp'
-            filename_suggestion = self.data_file_label.text().replace(".dat", "") + "_dNdlogDp"
-        else: # if no file selected, suggest empty string
-            filename_suggestion = ""
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save Inverted Data", filename_suggestion, "csv Files (*.csv);;All Files (*)", options=options)
-
-        # construct headers list for the output file
-        dp_headers = []
-        # get LowerDp and UpperDp values on each row
-        # using i+1 as index to skip index 0 (rows start from 1)
-        for i in range(len(self.Ninv)):
-            lower = str(round(self.Ninv['LowerDp'][i+1], 2)) # round to 2 decimals
-            upper = str(round(self.Ninv['UpperDp'][i+1], 2)) # round to 2 decimals
-            # construct header string and add to list
-            dp_headers.append('Bin ' + lower + '-' + upper + ' nm')
-        #print(dp_headers)
-
-        # transpose the Ninv dataframe to get bins as columns and scans as rows
-        save_data = self.Ninv.T
-        # filter rows that start with 'dN' to leave out metadata rows
-        save_data = save_data.filter(regex='^dN', axis=0)
-        # add dp_headers as column names
-        save_data.columns = dp_headers
-        # reverse the order of columns: from smallest bin to largest bin
-        save_data = save_data[save_data.columns[::-1]]
-
-        # round values >= 1 to 2 decimals
-        save_data = save_data.mask(save_data >= 1, save_data.astype(float).round(2))
-        # round values < 1 to 2 significant numbers
-        save_data = save_data.mask(save_data < 1, save_data.applymap(lambda x: float("%.2g" % x)))
-
-        # if Matlab time format is toggled on, convert scan_start_time values to Matlab format
-        if self.matlab_time_btn.isChecked():
-            matlab_start_times = []
-            for i in self.scan_start_time:
-                # convert numpy.datetime64 object to datetime object
-                t = pd.to_datetime(i)
-                # convert datetime object to Matlab format: dd-mmm-yyyy HH:MM:SS e.g. 19-Aug-2023 14:23:01
-                t = t.strftime('%d-%b-%Y %H:%M:%S')
-                # add time to matlab_start_times list
-                matlab_start_times.append(t)
-            # add scan start times in Matlab format as first column
-            save_data.insert(0, 'Scan start time', matlab_start_times)
-        # if Matlab time format is toggled off, use start_scan_time as it is
-        else:
-            # add scan start times as first column
-            save_data.insert(0, 'Scan start time', self.scan_start_time)
+        daily_files = False
+        # if daily files is checked and multiple files are loaded, select save folder
+        if self.daily_files_btn.isChecked() and len(self.current_filenames) > 1:
+            # browse for save folder
+            directory = QFileDialog.getExistingDirectory(self, "Select save folder")
+            # if file dialog is canceled, return
+            if not directory:
+                return
+            # set daily_files flag, create filenames and dataframes later
+            daily_files = True
+        else: # otherwise, select single save file
+            # suggest filename based on original name if one file is selected
+            if len(self.current_filenames) == 1:
+                # get filename, remove file ending (.dat) and add '_dNdlogDp'
+                filename_suggestion = self.current_filenames[0].replace(".dat", "") + "_dNdlogDp"
+            else: # if multiple files are selected, suggest filename with day (YYYYMMDD) or days (YYYYMMDD-YYYYMMDD)
+                # find unique days in scan_start_time
+                unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
+                # if only one day, suggest filename with that day
+                if len(unique_days) == 1:
+                    filename_suggestion = str(str(unique_days[0]).replace("-", "")) + "_dNdlogDp"
+                else: # if multiple days, suggest filename with first and last day
+                    filename_suggestion = str(str(unique_days[0]).replace("-", "")) + "-" + str(str(unique_days[-1]).replace("-", "")) + "_dNdlogDp"
+            # open file dialog
+            file_name, _ = QFileDialog.getSaveFileName(self, "Save inverted data", filename_suggestion, "csv files (*.csv);;All files (*)", options=QFileDialog.Option.ReadOnly)
+            # if file dialog is canceled, return
+            if not file_name:
+                return
+            filenames = [file_name]
         
-        # calculate concentration values above largest bin
-        larger_concentration = concentration_above_bins(self.scan_start_time, self.data_df, self.lowest_bin_limit)
-        # add result as column to save_data dataframe
-        highest_dp = str(round(self.Ninv['UpperDp'].iloc[0], 2))
-        save_data[('Dp >' + highest_dp + ' nm total number concentration')] = larger_concentration
+        # set cursor to loading
+        self.application.setOverrideCursor(Qt.WaitCursor)
+        
+        try:
+            # construct headers list for the output file
+            dp_headers = []
+            # get LowerDp and UpperDp values on each row
+            # using i+1 as index to skip index 0 (rows start from 1)
+            for i in range(len(self.Ninv)):
+                lower = str(round(self.Ninv['LowerDp'][i+1], 2)) # round to 2 decimals
+                upper = str(round(self.Ninv['UpperDp'][i+1], 2)) # round to 2 decimals
+                # construct header string and add to list
+                dp_headers.append('Bin ' + lower + '-' + upper + ' nm')
+            #print(dp_headers)
 
-        if file_name:
-            try:
-                save_data.to_csv(file_name, sep=',', index=False, lineterminator='\n')
-                # add software version and calibration filename to first row of the file
-                with open(file_name, 'r') as original:
-                    data = original.read()
-                with open(file_name, 'w') as modified:
-                    modified.write(f'Software version: {version_number} ; Calibration file: {self.calibration_file_label.text().split('/')[-1]}\n')
-                    modified.write(data)
-                print("Inverted data saved to", file_name)
-            except:
-                self.error_output.append("Error saving inverted data")
+            # transpose the Ninv dataframe to get bins as columns and scans as rows
+            save_data = self.Ninv.T
+            # filter rows that start with 'dN' to leave out metadata rows
+            save_data = save_data.filter(regex='^dN', axis=0)
+            # add dp_headers as column names
+            save_data.columns = dp_headers
+            # reverse the order of columns: from smallest bin to largest bin
+            save_data = save_data[save_data.columns[::-1]]
+
+            # round values >= 1 to 2 decimals
+            save_data = save_data.mask(save_data >= 1, save_data.astype(float).round(2))
+            # round values < 1 to 2 significant numbers
+            save_data = save_data.mask(save_data < 1, save_data.map(lambda x: float("%.2g" % x)))
+
+            # if Matlab time format is toggled on, convert scan_start_time values to Matlab format
+            if self.matlab_time_btn.isChecked():
+                matlab_start_times = []
+                for i in self.scan_start_time:
+                    # convert numpy.datetime64 object to datetime object
+                    t = pd.to_datetime(i)
+                    # convert datetime object to Matlab format: dd-mmm-yyyy HH:MM:SS e.g. 19-Aug-2023 14:23:01
+                    t = t.strftime('%d-%b-%Y %H:%M:%S')
+                    # add time to matlab_start_times list
+                    matlab_start_times.append(t)
+                # add scan start times in Matlab format as first column
+                save_data.insert(0, 'Scan start time', matlab_start_times)
+            # if Matlab time format is toggled off, use start_scan_time as it is
+            else:
+                # add scan start times as first column
+                save_data.insert(0, 'Scan start time', self.scan_start_time)
+            
+            # calculate concentration values above largest bin
+            larger_concentration = concentration_above_bins(self.scan_start_time, self.data_df, self.lowest_bin_limit)
+            # add result as column to save_data dataframe
+            highest_dp = str(round(self.Ninv['UpperDp'].iloc[0], 2))
+            save_data[('Dp >' + highest_dp + ' nm total number concentration')] = larger_concentration
+
+            # if daily_files flag is set, create daily dataframes and filenames
+            if daily_files:
+                # find unique dates from scan start times
+                unique_dates = pd.to_datetime(save_data['Scan start time']).dt.date.unique()
+                # create empty lists for dataframes and filenames
+                dataframes = []
+                filenames = []
+                # loop through all unique dates
+                for date in unique_dates:
+                    # filter save_data by date
+                    dataframe = save_data[pd.to_datetime(save_data['Scan start time']).dt.date == date]
+                    # create filename with YYYYMMDD date
+                    filename = directory + '/' + date.strftime('%Y%m%d') + '_dNdlogDp' + '.csv'
+                    # add filename and dataframe to lists
+                    filenames.append(filename)
+                    dataframes.append(dataframe)
+            # if only one file, put save_data as one element into dataframes list
+            else:
+                dataframes = [save_data]
+
+            # loop through all filenames and dataframes
+            for i in range(len(filenames)):
+                try:
+                    filename = filenames[i]
+                    dataframe = dataframes[i]
+                    # save data to file
+                    dataframe.to_csv(filename, sep=',', index=False, lineterminator='\n')
+                    # add software version and calibration filename to first row of the file
+                    with open(filename, 'r') as original:
+                        data = original.read()
+                    with open(filename, 'w') as modified:
+                        modified.write(f"Software version: {version_number} ; Calibration file: {self.calibration_file_label.text().split('/')[-1]}\n")
+                        modified.write(data)
+                    print("Inverted data saved to", filename)
+                    self.error_output.append("Inverted data saved to " + filename)
+                except Exception as e:
+                    self.error_output.append("Error saving inverted data:")
+                    self.error_output.append(str(e))
+            
+            # restore cursor to normal
+            self.application.restoreOverrideCursor()
+        
+        except Exception as e:
+            self.error_output.append("Error saving inverted data:")
+            self.error_output.append(str(e))
+            self.application.restoreOverrideCursor() # restore cursor to normal
 
     def keyPressEvent(self,event):
         if self.markers_added == True:
@@ -1618,7 +1792,7 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = MainWindow(app)
     window.show()
     sys.exit(app.exec())
 

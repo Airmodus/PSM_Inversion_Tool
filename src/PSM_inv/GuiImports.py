@@ -7,6 +7,7 @@ import time
 import datetime
 import shutil
 import tempfile
+import traceback
 
 # external packages
 import pandas as pd
@@ -32,4 +33,5 @@ from PyQt5.QtWidgets import (QApplication,
                              QPushButton,
                              QFileDialog,
                              QCheckBox,
-                             QSplitter)
+                             QSplitter,
+                             QSizePolicy)
