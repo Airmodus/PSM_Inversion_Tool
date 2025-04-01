@@ -1647,8 +1647,10 @@ class MainWindow(QMainWindow):
             return
         print("Saving inverted data...")
         daily_files = False
-        # if daily files is checked and multiple files are loaded, select save folder
-        if self.daily_files_btn.isChecked() and len(self.current_filenames) > 1:
+        # find unique days in scan_start_time
+        unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
+        # if daily files is checked and data is from multiple days, select save folder
+        if self.daily_files_btn.isChecked() and len(unique_days) > 1:
             # browse for save folder
             directory = QFileDialog.getExistingDirectory(self, "Select save folder")
             # if file dialog is canceled, return
@@ -1662,8 +1664,6 @@ class MainWindow(QMainWindow):
                 # get filename, remove file ending (.dat) and add '_dNdlogDp'
                 filename_suggestion = self.current_filenames[0].replace(".dat", "") + "_dNdlogDp"
             else: # if multiple files are selected, suggest filename with day (YYYYMMDD) or days (YYYYMMDD-YYYYMMDD)
-                # find unique days in scan_start_time
-                unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
                 # if only one day, suggest filename with that day
                 if len(unique_days) == 1:
                     filename_suggestion = str(str(unique_days[0]).replace("-", "")) + "_dNdlogDp"
