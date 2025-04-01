@@ -6,12 +6,15 @@ from PSM_inv.HelperFunctions import *
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
 version_number = "0.6.0"
 
-# store file path
-filePath = os.path.realpath(os.path.dirname(__file__))
-# store main directory path
-mainPath = os.path.realpath(os.path.join(filePath, os.pardir))
-# replace backslashes with forward slashes
-mainPath = mainPath.replace('\\', '/')
+# define file paths according to run mode (exe or script)
+script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
+script_path = script_path.replace('\\', '/') # replace backslashes with forward slashes
+# exe (one file)
+if getattr(sys, 'frozen', False):
+    resource_path = script_path + "/res" # path of /res/ folder (images, icons)
+# script
+else:
+    resource_path = os.path.dirname(script_path) + "/res" # path of /res/ folder (images, icons)
 
 class DateTimeAxisItem(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
@@ -243,10 +246,10 @@ class MainWindow(QMainWindow):
         self.green = (105,255,0)
 
         # set stylesheet from file
-        with open(mainPath + "/src/style.css", "r") as file:
+        with open(script_path + "/style.css", "r") as file:
             self.setStyleSheet(file.read())
         # create stylesheet for setting checkbox images
-        checkbox_stylesheet = "QCheckBox::indicator::checked { image: url(" + mainPath + "/res/images/checkbox_checked_fill_transparent.png); } QCheckBox::indicator::unchecked { image: url(" + mainPath + "/res/images/checkbox_unchecked_fill_transparent.png); }"
+        checkbox_stylesheet = "QCheckBox::indicator::checked { image: url(" + resource_path + "/images/checkbox_checked_fill_transparent.png); } QCheckBox::indicator::unchecked { image: url(" + resource_path + "/images/checkbox_unchecked_fill_transparent.png); }"
 
         self.setWindowTitle("Airmodus PSM Inversion Tool v. " + version_number)
         # resizing the whole app
@@ -264,7 +267,7 @@ class MainWindow(QMainWindow):
         # Create the logo
         top_layout.addStretch()
         self.logo = QLabel()
-        pixmap = QPixmap(mainPath + '/res/images/Airmodus_white.png')
+        pixmap = QPixmap(resource_path + '/images/Airmodus_white.png')
         self.logo.setPixmap(pixmap)
         top_layout.addWidget(self.logo)
         main_layout.addLayout(top_layout)
