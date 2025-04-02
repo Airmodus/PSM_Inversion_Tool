@@ -14,9 +14,11 @@ import pandas as pd
 import numpy as np
 import pyqtgraph as pg
 from PyQt5.QtCore import (Qt,
-                          QLocale)
+                          QLocale,
+                          QRegExp)
 from PyQt5.QtGui import (QIntValidator,
                          QDoubleValidator,
+                         QRegExpValidator,
                          QPixmap,
                          QTransform)
 from PyQt5.QtWidgets import (QApplication,

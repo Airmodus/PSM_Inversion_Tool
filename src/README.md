@@ -1,5 +1,9 @@
 # PSM Inversion Tool - Software change log 
 
+### 0.7.0 - 2025.04.02
+- Custom bin limit input
+- Max Dp from calibration file
+
 ### 0.6.0 - 2025.03.25
 - Multi-file inversion
 - Loading cursor for lengthy processes

@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.6.0"
+version_number = "0.7.0"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -488,9 +488,12 @@ class MainWindow(QMainWindow):
 
         bin_limits_label = QLabel("Bin limits:")
         left_layout.addWidget(bin_limits_label,5,2)
-        # label showing bin sizes according to selected amount of bins
-        self.bin_limits_text = QLabel()
-        left_layout.addWidget(self.bin_limits_text,6,2,1,3)
+        # input for bin limits, updated when bin_selection is changed
+        self.bin_limits_edit = QLineEdit()
+        bin_validator = QRegExpValidator(QRegExp("[0-9. ]+")) # allow numbers, dots and spaces
+        self.bin_limits_edit.setValidator(bin_validator)
+        self.bin_limits_edit.textEdited.connect(self.bin_limits_edited) # set bin selection to "custom" when edited
+        left_layout.addWidget(self.bin_limits_edit,6,2,1,3)
         # connect currentTextChanged signal to show_bin_limits function
         self.bin_selection.currentTextChanged.connect(lambda text: self.show_bin_limits(text))
 
@@ -723,18 +726,20 @@ class MainWindow(QMainWindow):
                 Inverts the data and plots data on all three graphs,
                 """
                 if self.data_df is not None and self.calibration_df is not None:
+                    
+                    # if keyword argument 'bin_limits' was given, use it
+                    if 'bin_limits' in kwargs:
+                        bin_limits = kwargs['bin_limits']
+                    else:
+                        # convert bin limits input text to list of floats
+                        bin_limits = self.convert_bin_limits()
 
                     # Inversion --------------------------------------------------------
 
                     # update the measurement data by running it through inst_calib function
                     self.calibration_df, self.data_df  = self.inst_calib()
 
-                    # if keyword argument 'bin_limits' was given, pass it to bin_data
-                    if 'bin_limits' in kwargs:
-                        self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits = kwargs['bin_limits'])
-                    else:
-                        # Bin the concentration data, set the number of bins
-                        self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data()
+                    self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits)
 
                     Sn = self.avg_n_input.text()
                     if Sn == "":
@@ -1399,28 +1404,16 @@ class MainWindow(QMainWindow):
         return self.calibration_df, self.data_df
 
     # Bin the raw data to enable avaraging over scans, and to yield supplementary data for the inversion
-    def bin_data(self, **kwargs):
+    def bin_data(self, bin_limits):
         # Skip the metadata columns
         skip = self.n_len_metadata
 
-        # if keyword argument 'bin_limits' was given
-        if 'bin_limits' in kwargs:
-            # use given bin limits
-            fixed_bin_limits = kwargs['bin_limits']
-            # get number of bins
-            num_bins = len(fixed_bin_limits) - 1
-        # if keyword argument was not given
-        else:
-            # get bin limit list from bin_dict using bin_selection value (bin amount) as key
-            fixed_bin_limits = self.bin_dict[self.bin_selection.currentText()]
-            # get num_bins from bin_selection
-            num_bins = int(self.bin_selection.currentText())
-        print("fixed bin limits", fixed_bin_limits)
+        fixed_bin_limits = bin_limits
+        num_bins = len(fixed_bin_limits) - 1 # get number of bins
         self.n = num_bins
 
-        # TODO use fixed_bin_limits in calculateBins function
         # calculate bins
-        bins = calculateBins(self.calibration_df,fixed_bin_limits) # add 1 to num bins to get the correct number of bins
+        bins = calculateBins(self.calibration_df,fixed_bin_limits)
         print("bin saturator values", bins)
         self.bin_lims = fixed_bin_limits
         self.bin_centers = geom_means(fixed_bin_limits)
@@ -1602,20 +1595,23 @@ class MainWindow(QMainWindow):
         self.bin_selection.clear()
         # set largest bin limit according to maxDp from calibration file
         maxDp = self.maxDp
+        # convert maxDp to integer if it's a whole number
+        if maxDp == int(maxDp):
+            maxDp = int(maxDp)
         # define bin limits
         if self.model == 'PSM2.0':
             bin_limits = [
-                [1.19, 1.5, 2.5, 5.0, maxDp],
-                [1.19, 1.5, 1.7, 2.5, 5.0, 8.0, maxDp],
-                [1.19, 1.3, 1.5, 1.7, 2.5, 3.0, 5.0, 8.0, maxDp],
-                [1.19, 1.3, 1.5, 1.7, 2.5, 3.0, 4.0, 5.0, 8.0, 10.0, maxDp],
-                [1.19, 1.3, 1.4, 1.5, 1.7, 2.0, 2.5, 3.0, 4.0, 5.0, 8.0, 10.0, maxDp],
-                [1.19, 1.3, 1.4, 1.5, 1.7, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.5, 8.0, 10.0, maxDp]
+                [1.19, 1.5, 2.5, 5, maxDp],
+                [1.19, 1.5, 1.7, 2.5, 5, 8, maxDp],
+                [1.19, 1.3, 1.5, 1.7, 2.5, 3, 5, 8, maxDp],
+                [1.19, 1.3, 1.5, 1.7, 2.5, 3, 4, 5, 8, 10, maxDp],
+                [1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 4, 5, 8, 10, maxDp],
+                [1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, maxDp]
                 ]
         elif self.model == 'A10':
             bin_limits = [
                 [1.19, 1.5, 1.7, 2.5, maxDp],
-                [1.19, 1.3, 1.5, 1.7, 2.5, 3.0, maxDp]
+                [1.19, 1.3, 1.5, 1.7, 2.5, 3, maxDp]
                 ]
         # clean up bin limits and add to dictionary
         self.bin_dict = {}
@@ -1626,7 +1622,7 @@ class MainWindow(QMainWindow):
             # add to dictionary with bin amount as key and bin limit list as value
             self.bin_dict[str(len(bin_list_filtered)-1)] = bin_list_filtered
         # add bin amounts to bin_selection
-        bin_amounts = []
+        bin_amounts = ["custom"]
         for i in self.bin_dict.keys():
             bin_amounts.append(i)
         self.bin_selection.addItems(bin_amounts)
@@ -1635,12 +1631,29 @@ class MainWindow(QMainWindow):
 
     # show bin limits of selected bin amount in GUI
     def show_bin_limits(self, bin_amount):
-        if bin_amount != "": # if received bin amount isn't empty
+        if bin_amount not in ["custom", ""]:
             bin_limits = self.bin_dict[bin_amount]
-            bin_limits_text = ""
-            for bin_limit in bin_limits:
-                bin_limits_text += str(bin_limit) + " "
-            self.bin_limits_text.setText(bin_limits_text)
+            bin_limits_text = " ".join(map(str, bin_limits))
+            self.bin_limits_edit.setText(bin_limits_text)
+    
+    # change bin amount selection to "custom" when bin limits are edited
+    def bin_limits_edited(self):
+        self.bin_selection.setCurrentText("custom")
+    
+    # convert bin limits input text to list of floats
+    def convert_bin_limits(self):
+        # get bin limits from bin_limits_edit
+        bin_limits_text = self.bin_limits_edit.text()
+        # split bin limits text to list
+        bin_limits = bin_limits_text.split()
+        # convert bin limits to float
+        bin_limits = [float(i) for i in bin_limits]
+        # sort bin limits in ascending order
+        bin_limits.sort()
+        # remove duplicate bin limit values
+        bin_limits = list(dict.fromkeys(bin_limits))
+        print("bin_limits:", bin_limits)
+        return bin_limits
 
     # save inversion data to a file or multiple files
     def save_inversion_data(self):
