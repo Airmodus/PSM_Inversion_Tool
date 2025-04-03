@@ -1591,6 +1591,11 @@ class MainWindow(QMainWindow):
         # make sure model and maxDp are defined (data and calibration files are loaded)
         if self.model is None or self.maxDp is None:
             return
+        # check if bin_selection is set to "custom"
+        if self.bin_selection.currentText() == "custom":
+            custom_bins = True # keep custom bins when updating bin_selection
+        else:
+            custom_bins = False # set bin_selection to default value
         # clear bin_selection before adding new items
         self.bin_selection.clear()
         # set largest bin limit according to maxDp from calibration file
@@ -1626,8 +1631,9 @@ class MainWindow(QMainWindow):
         for i in self.bin_dict.keys():
             bin_amounts.append(i)
         self.bin_selection.addItems(bin_amounts)
-        # set defalt value to last item in bin_selection
-        self.bin_selection.setCurrentText(bin_amounts[-1])
+        # if custom bins are not set by user, set bin_selection value to last item (most bins) by default
+        if custom_bins == False:
+            self.bin_selection.setCurrentText(bin_amounts[-1])
 
     # show bin limits of selected bin amount in GUI
     def show_bin_limits(self, bin_amount):
