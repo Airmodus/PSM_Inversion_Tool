@@ -4,14 +4,17 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.6.0"
+version_number = "0.7.0"
 
-# store file path
-filePath = os.path.realpath(os.path.dirname(__file__))
-# store main directory path
-mainPath = os.path.realpath(os.path.join(filePath, os.pardir))
-# replace backslashes with forward slashes
-mainPath = mainPath.replace('\\', '/')
+# define file paths according to run mode (exe or script)
+script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
+script_path = script_path.replace('\\', '/') # replace backslashes with forward slashes
+# exe (one file)
+if getattr(sys, 'frozen', False):
+    resource_path = script_path + "/res" # path of /res/ folder (images, icons)
+# script
+else:
+    resource_path = os.path.dirname(script_path) + "/res" # path of /res/ folder (images, icons)
 
 class DateTimeAxisItem(pg.AxisItem):
     def tickStrings(self, values, scale, spacing):
@@ -243,10 +246,10 @@ class MainWindow(QMainWindow):
         self.green = (105,255,0)
 
         # set stylesheet from file
-        with open(mainPath + "/src/style.css", "r") as file:
+        with open(script_path + "/style.css", "r") as file:
             self.setStyleSheet(file.read())
         # create stylesheet for setting checkbox images
-        checkbox_stylesheet = "QCheckBox::indicator::checked { image: url(" + mainPath + "/res/images/checkbox_checked_fill_transparent.png); } QCheckBox::indicator::unchecked { image: url(" + mainPath + "/res/images/checkbox_unchecked_fill_transparent.png); }"
+        checkbox_stylesheet = "QCheckBox::indicator::checked { image: url(" + resource_path + "/images/checkbox_checked_fill_transparent.png); } QCheckBox::indicator::unchecked { image: url(" + resource_path + "/images/checkbox_unchecked_fill_transparent.png); }"
 
         self.setWindowTitle("Airmodus PSM Inversion Tool v. " + version_number)
         # resizing the whole app
@@ -264,7 +267,7 @@ class MainWindow(QMainWindow):
         # Create the logo
         top_layout.addStretch()
         self.logo = QLabel()
-        pixmap = QPixmap(mainPath + '/res/images/Airmodus_white.png')
+        pixmap = QPixmap(resource_path + '/images/Airmodus_white.png')
         self.logo.setPixmap(pixmap)
         top_layout.addWidget(self.logo)
         main_layout.addLayout(top_layout)
@@ -404,7 +407,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.load_data_btn,0,0)
         self.data_file_label = QLabel("No files selected")
         self.data_file_label.setObjectName("bordered")
-        self.data_file_label.setMaximumWidth(250)
+        self.data_file_label.setFixedWidth(250)
         self.data_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.data_file_label,0,1,1,3)
         self.refresh_file_btn = QPushButton("Refresh files")
@@ -420,7 +423,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.load_cal_btn,1,0)
         self.calibration_file_label = QLabel("No file selected")
         self.calibration_file_label.setObjectName("bordered")
-        self.calibration_file_label.setMaximumWidth(250)
+        self.calibration_file_label.setFixedWidth(250)
         self.calibration_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.calibration_file_label,1,1,1,3)
         self.invert_and_plot_btn = QPushButton("Invert and plot")
@@ -475,21 +478,22 @@ class MainWindow(QMainWindow):
         self.inversion_method_label = QLabel("Inversion method")
         left_layout.addWidget(self.inversion_method_label,3,2)
         self.inversion_method_selection = QComboBox()
-        self.inversion_method_selection.setFixedWidth(120)
         self.inversion_method_selection.addItems(["Stepwise"]) # ,"Kernel","EM"
         left_layout.addWidget(self.inversion_method_selection,3,3)
 
         bin_label = QLabel("Number of bins")
         left_layout.addWidget(bin_label,4,2)
         self.bin_selection = QComboBox()
-        self.bin_selection.setFixedWidth(60)
         left_layout.addWidget(self.bin_selection,4,3)
 
         bin_limits_label = QLabel("Bin limits:")
         left_layout.addWidget(bin_limits_label,5,2)
-        # label showing bin sizes according to selected amount of bins
-        self.bin_limits_text = QLabel()
-        left_layout.addWidget(self.bin_limits_text,6,2,1,3)
+        # input for bin limits, updated when bin_selection is changed
+        self.bin_limits_edit = QLineEdit()
+        bin_validator = QRegExpValidator(QRegExp("[0-9. ]+")) # allow numbers, dots and spaces
+        self.bin_limits_edit.setValidator(bin_validator)
+        self.bin_limits_edit.textEdited.connect(self.bin_limits_edited) # set bin selection to "custom" when edited
+        left_layout.addWidget(self.bin_limits_edit,6,2,1,3)
         # connect currentTextChanged signal to show_bin_limits function
         self.bin_selection.currentTextChanged.connect(lambda text: self.show_bin_limits(text))
 
@@ -579,6 +583,8 @@ class MainWindow(QMainWindow):
         self.Ninv = None
         self.Ninv_avg = None
         self.day_markers = []
+        self.model = None
+        self.maxDp = None
 
         self.extra_features = ExtraFeatures()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
@@ -720,18 +726,20 @@ class MainWindow(QMainWindow):
                 Inverts the data and plots data on all three graphs,
                 """
                 if self.data_df is not None and self.calibration_df is not None:
+                    
+                    # if keyword argument 'bin_limits' was given, use it
+                    if 'bin_limits' in kwargs:
+                        bin_limits = kwargs['bin_limits']
+                    else:
+                        # convert bin limits input text to list of floats
+                        bin_limits = self.convert_bin_limits()
 
                     # Inversion --------------------------------------------------------
 
                     # update the measurement data by running it through inst_calib function
                     self.calibration_df, self.data_df  = self.inst_calib()
 
-                    # if keyword argument 'bin_limits' was given, pass it to bin_data
-                    if 'bin_limits' in kwargs:
-                        self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits = kwargs['bin_limits'])
-                    else:
-                        # Bin the concentration data, set the number of bins
-                        self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data()
+                    self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits)
 
                     Sn = self.avg_n_input.text()
                     if Sn == "":
@@ -963,7 +971,6 @@ class MainWindow(QMainWindow):
                 if self.model is None:
                     self.model = 'PSM2.0'
                     self.model_label.setText(f"Instrument Model: {self.model}")
-                    self.update_bin_selection(self.model) # update bin selection options according to device model
                 # if model doesn't match current file, raise error
                 elif self.model != 'PSM2.0':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
@@ -976,7 +983,6 @@ class MainWindow(QMainWindow):
                 if self.model is None:
                     self.model = 'A10'
                     self.model_label.setText(f"Instrument Model: {self.model}")
-                    self.update_bin_selection(self.model) # update bin selection options according to device model
                 # if model doesn't match current file, raise error
                 elif self.model != 'A10':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
@@ -1056,6 +1062,7 @@ class MainWindow(QMainWindow):
                 self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
+                self.update_bin_selection() # update bin selection options according to model and maxDp
 
                 # restore cursor to normal
                 self.application.restoreOverrideCursor()
@@ -1079,42 +1086,32 @@ class MainWindow(QMainWindow):
             #print("min:",self.data_df['concentration'].min())
             #print("max:",self.data_df['concentration'].max())
 
-        
+    # load new calibration file via file dialog
     def load_calibration(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Load calibration file", "", "Text files (*.txt);;All files (*)")
         self.cal_file_name = file_name
-        """
-        file_name = "/Users/ahtavarasmus/Developer/Airmodus_main/Airmodus GUI/InversionGui/Archive/CF_ALL_ALT.txt"
-        """
-        # if self.data_df is not None:
+        self.read_calibration(file_name, new_file=True)
+
+    # reload existing calibration file
+    def reload_calibration(self):
+        file_name = self.cal_file_name
+        self.read_calibration(file_name)
+    
+    # read calibration file into calibration_df
+    def read_calibration(self, file_name, new_file=False):
         if file_name:
             try:
                 self.calibration_df = pd.read_csv(file_name, delimiter='\t', header=None)
                 self.calibration_df.columns = ['cal_satflow'] + self.calibration_df.columns[1:].tolist()
                 self.calibration_df.columns = [self.calibration_df.columns[0], 'cal_diameter'] + self.calibration_df.columns[2:].tolist()
                 self.calibration_df.columns = self.calibration_df.columns[:2].tolist() + ['cal_maxdeteff'] + self.calibration_df.columns[3:].tolist()
+                self.maxDp = self.calibration_df['cal_diameter'].iloc[-1] # read maxDp value and store to variable
                 self.calibration_file_label.setText(file_name)
                 self.calibration_file_label.setToolTip(file_name)
+                if new_file: # if new file was loaded (no reload)
+                    self.update_bin_selection() # update bin selection options according to model and maxDp
             except:
                 self.error_output.append("Error: Calibration file could not be read.")
-        # else:
-        #     self.error_output.append("Choose data file first.")
-
-    def reload_calibration(self):
-        if self.data_df is not None:
-            file_name = self.cal_file_name
-            if file_name:
-                try:
-                    self.calibration_df = pd.read_csv(file_name, delimiter='\t', header=None)
-                    self.calibration_df.columns = ['cal_satflow'] + self.calibration_df.columns[1:].tolist()
-                    self.calibration_df.columns = [self.calibration_df.columns[0], 'cal_diameter'] + self.calibration_df.columns[2:].tolist()
-                    self.calibration_df.columns = self.calibration_df.columns[:2].tolist() + ['cal_maxdeteff'] + self.calibration_df.columns[3:].tolist()
-                    self.calibration_file_label.setText(file_name)
-                    self.calibration_file_label.setToolTip(file_name)
-                except:
-                    self.error_output.append("Error: Calibration file could not be read.")
-        else:
-            self.error_output.append("Choose data file first.")
 
     def update_plot_title(self):
         """
@@ -1366,7 +1363,7 @@ class MainWindow(QMainWindow):
             self.calibration_df = self.extra_features.calibration_fitting_df
         # use cal_fit to define the satflow where the diameter is the upper limit of the instrument
         elif self.model == 'PSM2.0':
-            maxDp = 12
+            maxDp = self.maxDp # use maxDp from calibration file
             satflowlimit = (maxDp - cal_fit[1])/cal_fit[0]
             # limit satflow lower limit to 0.05
             if satflowlimit < 0.05:
@@ -1374,7 +1371,7 @@ class MainWindow(QMainWindow):
             self.calibration_df['cal_satflow'][len(self.calibration_df)-1] = satflowlimit
             self.calibration_df['cal_diameter'][len(self.calibration_df)-1] = maxDp
         else:
-            maxDp = 4
+            maxDp = self.maxDp # use maxDp from calibration file
             satflowlimit = (maxDp - cal_fit[1])/cal_fit[0]
             # limit satflow lower limit to 0.1
             if satflowlimit < 0.1:
@@ -1407,28 +1404,16 @@ class MainWindow(QMainWindow):
         return self.calibration_df, self.data_df
 
     # Bin the raw data to enable avaraging over scans, and to yield supplementary data for the inversion
-    def bin_data(self, **kwargs):
+    def bin_data(self, bin_limits):
         # Skip the metadata columns
         skip = self.n_len_metadata
 
-        # if keyword argument 'bin_limits' was given
-        if 'bin_limits' in kwargs:
-            # use given bin limits
-            fixed_bin_limits = kwargs['bin_limits']
-            # get number of bins
-            num_bins = len(fixed_bin_limits) - 1
-        # if keyword argument was not given
-        else:
-            # get bin limit list from bin_dict using bin_selection value (bin amount) as key
-            fixed_bin_limits = self.bin_dict[self.bin_selection.currentText()]
-            # get num_bins from bin_selection
-            num_bins = int(self.bin_selection.currentText())
-        print("fixed bin limits", fixed_bin_limits)
+        fixed_bin_limits = bin_limits
+        num_bins = len(fixed_bin_limits) - 1 # get number of bins
         self.n = num_bins
 
-        # TODO use fixed_bin_limits in calculateBins function
         # calculate bins
-        bins = calculateBins(self.calibration_df,fixed_bin_limits) # add 1 to num bins to get the correct number of bins
+        bins = calculateBins(self.calibration_df,fixed_bin_limits)
         print("bin saturator values", bins)
         self.bin_lims = fixed_bin_limits
         self.bin_centers = geom_means(fixed_bin_limits)
@@ -1602,40 +1587,79 @@ class MainWindow(QMainWindow):
         print("Checkbox state changed:", state)
         # add checkbox logic here
     
-    def update_bin_selection(self, model):
+    def update_bin_selection(self):
+        # make sure model and maxDp are defined (data and calibration files are loaded)
+        if self.model is None or self.maxDp is None:
+            return
+        # check if bin_selection is set to "custom"
+        if self.bin_selection.currentText() == "custom":
+            custom_bins = True # keep custom bins when updating bin_selection
+        else:
+            custom_bins = False # set bin_selection to default value
         # clear bin_selection before adding new items
         self.bin_selection.clear()
-        # define bin amounts and limits: key = number of bins, value = list of bin limits
-        if model == 'PSM2.0':
-            self.bin_dict = { # TODO define actual bin limits
-                "4":[1.19, 1.5, 2.5, 5, 12],
-                "6":[1.19, 1.5, 1.7, 2.5, 5, 8, 12],
-                "8":[1.19, 1.3, 1.5, 1.7, 2.5, 3, 5, 8, 12],
-                "10":[1.19, 1.3, 1.5, 1.7, 2.5, 3, 4, 5, 8, 10, 12],
-                "12":[1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 4, 5, 8, 10, 12],
-                "14":[1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, 12],
-                }
-        elif model == 'A10':
-            self.bin_dict = { # TODO define actual bin limits
-                "4":[1.19, 1.5, 1.7, 2.5, 4],
-                "6":[1.19, 1.3, 1.5, 1.7, 2.5, 3, 4]
-                }
+        # set largest bin limit according to maxDp from calibration file
+        maxDp = self.maxDp
+        # convert maxDp to integer if it's a whole number
+        if maxDp == int(maxDp):
+            maxDp = int(maxDp)
+        # define bin limits
+        if self.model == 'PSM2.0':
+            bin_limits = [
+                [1.19, 1.5, 2.5, 5, maxDp],
+                [1.19, 1.5, 1.7, 2.5, 5, 8, maxDp],
+                [1.19, 1.3, 1.5, 1.7, 2.5, 3, 5, 8, maxDp],
+                [1.19, 1.3, 1.5, 1.7, 2.5, 3, 4, 5, 8, 10, maxDp],
+                [1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 4, 5, 8, 10, maxDp],
+                [1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, maxDp]
+                ]
+        elif self.model == 'A10':
+            bin_limits = [
+                [1.19, 1.5, 1.7, 2.5, maxDp],
+                [1.19, 1.3, 1.5, 1.7, 2.5, 3, maxDp]
+                ]
+        # clean up bin limits and add to dictionary
+        self.bin_dict = {}
+        for bin_list in bin_limits:
+            bin_list.sort() # sort bin limits in ascending order
+            bin_list = list(dict.fromkeys(bin_list)) # remove duplicate bin limit values
+            bin_list_filtered = list(filter(lambda x: x <= maxDp, bin_list)) # remove bin limits larger than maxDp
+            # add to dictionary with bin amount as key and bin limit list as value
+            self.bin_dict[str(len(bin_list_filtered)-1)] = bin_list_filtered
         # add bin amounts to bin_selection
-        bin_amounts = []
+        bin_amounts = ["custom"]
         for i in self.bin_dict.keys():
             bin_amounts.append(i)
         self.bin_selection.addItems(bin_amounts)
-        # set defalt value to last item in bin_selection
-        self.bin_selection.setCurrentText(bin_amounts[-1])
+        # if custom bins are not set by user, set bin_selection value to last item (most bins) by default
+        if custom_bins == False:
+            self.bin_selection.setCurrentText(bin_amounts[-1])
 
     # show bin limits of selected bin amount in GUI
     def show_bin_limits(self, bin_amount):
-        if bin_amount != "": # if received bin amount isn't empty
+        if bin_amount not in ["custom", ""]:
             bin_limits = self.bin_dict[bin_amount]
-            bin_limits_text = ""
-            for bin_limit in bin_limits:
-                bin_limits_text += str(bin_limit) + " "
-            self.bin_limits_text.setText(bin_limits_text)
+            bin_limits_text = " ".join(map(str, bin_limits))
+            self.bin_limits_edit.setText(bin_limits_text)
+    
+    # change bin amount selection to "custom" when bin limits are edited
+    def bin_limits_edited(self):
+        self.bin_selection.setCurrentText("custom")
+    
+    # convert bin limits input text to list of floats
+    def convert_bin_limits(self):
+        # get bin limits from bin_limits_edit
+        bin_limits_text = self.bin_limits_edit.text()
+        # split bin limits text to list
+        bin_limits = bin_limits_text.split()
+        # convert bin limits to float
+        bin_limits = [float(i) for i in bin_limits]
+        # sort bin limits in ascending order
+        bin_limits.sort()
+        # remove duplicate bin limit values
+        bin_limits = list(dict.fromkeys(bin_limits))
+        print("bin_limits:", bin_limits)
+        return bin_limits
 
     # save inversion data to a file or multiple files
     def save_inversion_data(self):
@@ -1645,8 +1669,10 @@ class MainWindow(QMainWindow):
             return
         print("Saving inverted data...")
         daily_files = False
-        # if daily files is checked and multiple files are loaded, select save folder
-        if self.daily_files_btn.isChecked() and len(self.current_filenames) > 1:
+        # find unique days in scan_start_time
+        unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
+        # if daily files is checked and data is from multiple days, select save folder
+        if self.daily_files_btn.isChecked() and len(unique_days) > 1:
             # browse for save folder
             directory = QFileDialog.getExistingDirectory(self, "Select save folder")
             # if file dialog is canceled, return
@@ -1660,8 +1686,6 @@ class MainWindow(QMainWindow):
                 # get filename, remove file ending (.dat) and add '_dNdlogDp'
                 filename_suggestion = self.current_filenames[0].replace(".dat", "") + "_dNdlogDp"
             else: # if multiple files are selected, suggest filename with day (YYYYMMDD) or days (YYYYMMDD-YYYYMMDD)
-                # find unique days in scan_start_time
-                unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
                 # if only one day, suggest filename with that day
                 if len(unique_days) == 1:
                     filename_suggestion = str(str(unique_days[0]).replace("-", "")) + "_dNdlogDp"
