@@ -997,7 +997,10 @@ class MainWindow(QMainWindow):
             # rename columns by old names
             current_data_df.rename(columns={"Concentration from PSM (1/cm3)": "concentration", "Saturator flow rate (lpm)": "satflow", "Dilution correction factor": "dilution", "CPC system status errors (hex)": "CPC_system_status_error", "PSM system status errors (hex)": "PSM_system_status_error"}, inplace=True)
             # convert time column data to datetime, PSM2.0 format: YYYY.MM.DD hh:mm:ss
-            current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
+            try:
+                current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
+            except: # exception for 10 Hz data
+                current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S.%f')
         elif self.model == 'A10':
             # skip header if device is A10
             current_data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', skiprows=1, header=None)
