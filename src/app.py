@@ -715,6 +715,7 @@ class MainWindow(QMainWindow):
 
     def invert_and_plot(self, **kwargs):
 
+        self.invert_and_plot_btn.clearFocus()
         # set cursor to loading
         self.application.setOverrideCursor(Qt.WaitCursor)
 
@@ -1030,6 +1031,7 @@ class MainWindow(QMainWindow):
                   
     def load_data(self, **kwargs):
 
+        self.load_data_btn.clearFocus()
         # if keyword argument 'current_filenames' was given, use it
         if 'current_filenames' in kwargs:
             file_names = kwargs['current_filenames']
@@ -1094,6 +1096,7 @@ class MainWindow(QMainWindow):
 
     # load new calibration file via file dialog
     def load_calibration(self):
+        self.load_cal_btn.clearFocus()
         file_name, _ = QFileDialog.getOpenFileName(self, "Load calibration file", "", "Text files (*.txt);;All files (*)")
         self.cal_file_name = file_name
         self.read_calibration(file_name, new_file=True)
@@ -1665,6 +1668,7 @@ class MainWindow(QMainWindow):
 
     # save inversion data to a file or multiple files
     def save_inversion_data(self):
+        self.save_button.clearFocus()
         # make sure inversion data exists
         if self.Ninv is None:
             self.error_output.append("No inverted data to save")
