@@ -726,6 +726,9 @@ class MainWindow(QMainWindow):
                 Inverts the data and plots data on all three graphs,
                 """
                 if self.data_df is not None and self.calibration_df is not None:
+
+                    # clean nan satflow values from data
+                    self.data_df.dropna(subset=['satflow'], inplace=True)
                     
                     # if keyword argument 'bin_limits' was given, use it
                     if 'bin_limits' in kwargs:
@@ -1434,10 +1437,6 @@ class MainWindow(QMainWindow):
         # Add the dilution factor to the dataframe
         dilution_factor = float(self.ext_dilution_fac_input.text())
         self.data_df['bin_mean_c'] = self.data_df['bin_mean_c'] * dilution_factor
-
-
-        # Clean nans from data
-        self.data_df.dropna(subset = ['satflow'],inplace=True)
 
         df_binmean = self.data_df[['bins', 'scan_no','bin_mean_c']].groupby(['bins', 'scan_no']).mean()
         df_binmean.reset_index(inplace=True)
