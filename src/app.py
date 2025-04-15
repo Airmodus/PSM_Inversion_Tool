@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.7.0"
+version_number = "0.7.1"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -715,6 +715,7 @@ class MainWindow(QMainWindow):
 
     def invert_and_plot(self, **kwargs):
 
+        self.invert_and_plot_btn.clearFocus()
         # set cursor to loading
         self.application.setOverrideCursor(Qt.WaitCursor)
 
@@ -726,6 +727,9 @@ class MainWindow(QMainWindow):
                 Inverts the data and plots data on all three graphs,
                 """
                 if self.data_df is not None and self.calibration_df is not None:
+
+                    # clean nan satflow values from data
+                    self.data_df.dropna(subset=['satflow'], inplace=True)
                     
                     # if keyword argument 'bin_limits' was given, use it
                     if 'bin_limits' in kwargs:
@@ -997,7 +1001,10 @@ class MainWindow(QMainWindow):
             # rename columns by old names
             current_data_df.rename(columns={"Concentration from PSM (1/cm3)": "concentration", "Saturator flow rate (lpm)": "satflow", "Dilution correction factor": "dilution", "CPC system status errors (hex)": "CPC_system_status_error", "PSM system status errors (hex)": "PSM_system_status_error"}, inplace=True)
             # convert time column data to datetime, PSM2.0 format: YYYY.MM.DD hh:mm:ss
-            current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
+            try:
+                current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
+            except: # exception for 10 Hz data
+                current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S.%f')
         elif self.model == 'A10':
             # skip header if device is A10
             current_data_df = pd.read_csv(self.temp_data_file.name, delimiter=',', skiprows=1, header=None)
@@ -1024,6 +1031,7 @@ class MainWindow(QMainWindow):
                   
     def load_data(self, **kwargs):
 
+        self.load_data_btn.clearFocus()
         # if keyword argument 'current_filenames' was given, use it
         if 'current_filenames' in kwargs:
             file_names = kwargs['current_filenames']
@@ -1088,6 +1096,7 @@ class MainWindow(QMainWindow):
 
     # load new calibration file via file dialog
     def load_calibration(self):
+        self.load_cal_btn.clearFocus()
         file_name, _ = QFileDialog.getOpenFileName(self, "Load calibration file", "", "Text files (*.txt);;All files (*)")
         self.cal_file_name = file_name
         self.read_calibration(file_name, new_file=True)
@@ -1432,10 +1441,6 @@ class MainWindow(QMainWindow):
         dilution_factor = float(self.ext_dilution_fac_input.text())
         self.data_df['bin_mean_c'] = self.data_df['bin_mean_c'] * dilution_factor
 
-
-        # Clean nans from data
-        self.data_df.dropna(subset = ['satflow'],inplace=True)
-
         df_binmean = self.data_df[['bins', 'scan_no','bin_mean_c']].groupby(['bins', 'scan_no']).mean()
         df_binmean.reset_index(inplace=True)
         self.n_scans = np.unique(df_binmean['scan_no'])
@@ -1663,6 +1668,7 @@ class MainWindow(QMainWindow):
 
     # save inversion data to a file or multiple files
     def save_inversion_data(self):
+        self.save_button.clearFocus()
         # make sure inversion data exists
         if self.Ninv is None:
             self.error_output.append("No inverted data to save")
