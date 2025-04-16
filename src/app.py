@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.7.1"
+version_number = "0.7.2"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -601,21 +601,26 @@ class MainWindow(QMainWindow):
         custom_bin_limits = calculate_bin_limits(min_size, max_size, num_bins)
         # call invert_and_plot with custom bin limits as kwarg
         self.invert_and_plot(bin_limits = custom_bin_limits)
+    
+    # clear all plots and markers
+    def clear_plots(self):
+        self.raw_plot.clear()
+        self.color_bar_plot.clear()
+        self.mid_plot.clear()
+        self.mid_color_bar_plot.clear()
+        self.size_dist_plot.clear()
+        self.raw_plot_marker.hide()
+        self.raw_plot_marker.setMovable(False)
+        self.markers_added = False
 
     def plot_raw(self):
         """
         Plots the raw data on the left graph right after getting the data file
         """
         if self.data_df is not None:
-
-            self.raw_plot.clear()
-            self.color_bar_plot.clear()
-            self.mid_plot.clear()
-            self.mid_color_bar_plot.clear()
-            self.size_dist_plot.clear()
-            self.raw_plot_marker.hide()
-            self.raw_plot_marker.setMovable(False)
-            self.markers_added = False
+            
+            # clear all plots and markers
+            self.clear_plots()
 
             # Convert Timestamp objects to POSIX timestamps
             self.posix_timestamps = self.data_df['t'].apply(lambda x: x.timestamp())
@@ -714,6 +719,8 @@ class MainWindow(QMainWindow):
 
 
     def invert_and_plot(self, **kwargs):
+
+        start_time = time.time() # store start time for process time measurement
 
         self.invert_and_plot_btn.clearFocus()
         # set cursor to loading
@@ -964,6 +971,10 @@ class MainWindow(QMainWindow):
             self.error_output.append("Error inverting data:")
             self.error_output.append(str(e))
             self.application.restoreOverrideCursor() # restore cursor to normal
+        
+        # print processing time in seconds
+        processing_time = time.time() - start_time
+        print(f"Processing time: {processing_time:.2f} seconds")
     
     def read_file(self):
         # determine device model by checking if "YYYY.MM.DD hh:mm:ss" is in file header
@@ -1061,11 +1072,15 @@ class MainWindow(QMainWindow):
                 self.Ninv_avg = None # reset inversion average dataframe
                 # read each file and append to dataframe
                 for file_name in file_names:
-                    # Create a temporary file and copy the contents of current file
-                    self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
-                    shutil.copy(file_name, self.temp_data_file.name)
-                    # read file contents and concatenate to data_df dataframe
-                    self.read_file()
+                    try:
+                        # Create a temporary file and copy the contents of current file
+                        self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
+                        shutil.copy(file_name, self.temp_data_file.name)
+                        # read file contents and concatenate to data_df dataframe
+                        self.read_file()
+                    except Exception as e:
+                        # print filename and error message to error output
+                        self.error_output.append(f"Error reading file {file_name.split("/")[-1]}: {str(e)}")
                 
                 self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
@@ -1079,6 +1094,7 @@ class MainWindow(QMainWindow):
                 traceback.print_exc()
                 self.error_output.append("Error loading data files:")
                 self.error_output.append(str(e))
+                self.clear_plots() # clear plots if error occurs
                 self.application.restoreOverrideCursor() # restore cursor to normal
 
             # Replace zero or negative values with a small positive number
