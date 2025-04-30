@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.7.2"
+version_number = "0.7.3"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -1026,6 +1026,9 @@ class MainWindow(QMainWindow):
 
         # Apply lag correction to concentration columns (i.e. shift the concentration values up by 4)
         current_data_df['concentration'] = current_data_df['concentration'].shift(self.CPC_time_lag)
+
+        # replace inf values with nan
+        current_data_df.replace([np.inf, -np.inf], np.nan, inplace=True)
 
         # concatenate dataframe to self.data_df
         self.data_df = pd.concat([self.data_df, current_data_df], ignore_index=True)
