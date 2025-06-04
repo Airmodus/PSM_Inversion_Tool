@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.7.3"
+version_number = "0.7.4"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -585,6 +585,7 @@ class MainWindow(QMainWindow):
         self.day_markers = []
         self.model = None
         self.maxDp = None
+        self.gap_start_times = []
 
         self.extra_features = ExtraFeatures()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
@@ -1024,7 +1025,7 @@ class MainWindow(QMainWindow):
             # convert time column data to datetime, A10 format: DD.MM.YYYY hh:mm:ss
             current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
 
-        # Apply lag correction to concentration columns (i.e. shift the concentration values up by 4)
+        # Apply lag correction to concentration columns (i.e. shift the concentration values up)
         current_data_df['concentration'] = current_data_df['concentration'].shift(self.CPC_time_lag)
 
         # replace inf values with nan
@@ -1035,6 +1036,19 @@ class MainWindow(QMainWindow):
 
         self.avg_n_input.setText("5")
         self.ext_dilution_fac_input.setText("1")
+    
+    def find_data_gaps(self):
+        # if there are gaps longer than 2 seconds, store the gap's starting time
+        self.gap_start_times = []
+        for i in range(0, len(self.data_df)-1):
+            # if the time difference between two consecutive rows is greater than 2 seconds
+            if (self.data_df['t'].iloc[i+1] - self.data_df['t'].iloc[i]).total_seconds() > 2:
+                # store the starting time of the gap
+                self.gap_start_times.append(self.data_df['t'].iloc[i])
+                # set concentration values to nan for last seconds before the gap according to CPC_time_lag
+                for j in range(0, abs(self.CPC_time_lag)):
+                    self.data_df.iloc[i-j, self.data_df.columns.get_loc('concentration')] = np.nan
+        print("Gap start times:", self.gap_start_times)
 
     # refreshes data by reloading current files
     def refresh_files(self):
@@ -1073,6 +1087,7 @@ class MainWindow(QMainWindow):
                 self.model = None # reset device model variable
                 self.Ninv = None # reset inversion dataframe
                 self.Ninv_avg = None # reset inversion average dataframe
+                self.gap_start_times = [] # reset gap start times
                 # read each file and append to dataframe
                 for file_name in file_names:
                     try:
@@ -1085,6 +1100,7 @@ class MainWindow(QMainWindow):
                         # print filename and error message to error output
                         self.error_output.append(f"Error reading file {file_name.split("/")[-1]}: {str(e)}")
                 
+                self.find_data_gaps() # scan for data gaps
                 self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
