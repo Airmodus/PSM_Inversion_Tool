@@ -753,6 +753,10 @@ class MainWindow(QMainWindow):
 
                     self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits)
 
+                    # TODO validate scans, remove invalid scans
+                    # TODO add GUI selection to disable this (for short data sets like calibration data)
+                    self.validate_scans()
+
                     Sn = self.avg_n_input.text()
                     if Sn == "":
                         Sn = 5
@@ -825,7 +829,7 @@ class MainWindow(QMainWindow):
 
 
                     # Convert numpy.datetime64 array to a POSIX timestamp array
-                    skip = self.n_len_metadata
+                    skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
                     y = self.Dplot
                     print("y", y)     
                     if self.avg_vs_raw_combobox.currentText() == 'Raw':
@@ -991,7 +995,6 @@ class MainWindow(QMainWindow):
                 elif self.model != 'PSM2.0':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
                 # set parameters according to PSM 2.0
-                self.n_len_metadata = 7
                 self.CPC_time_lag = -3
             else: # A10
                 print("A10")
@@ -1003,7 +1006,6 @@ class MainWindow(QMainWindow):
                 elif self.model != 'A10':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
                 # set parameters according to A10
-                self.n_len_metadata = 7 # TODO: check if correct, not sure about normal PSM
                 self.CPC_time_lag = -3 # Same here, check this number
 
         # Read the temporary file into a DataFrame and rename relevant columns
@@ -1243,8 +1245,7 @@ class MainWindow(QMainWindow):
     def averagedata(self,Sn):
         # Averaging over scans
 
-        # skip metadata columns
-        skip = self.n_len_metadata
+        skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
 
         try:
             # if Sn > 1 make a running average of dN and make a new dataframe called Nbinned_avg
@@ -1449,8 +1450,6 @@ class MainWindow(QMainWindow):
 
     # Bin the raw data to enable avaraging over scans, and to yield supplementary data for the inversion
     def bin_data(self, bin_limits):
-        # Skip the metadata columns
-        skip = self.n_len_metadata
 
         fixed_bin_limits = bin_limits
         num_bins = len(fixed_bin_limits) - 1 # get number of bins
@@ -1527,6 +1526,7 @@ class MainWindow(QMainWindow):
             # merge temp to Nbinned
             self.Nbinned = self.Nbinned.merge(temp, how = 'left',on='bins')
 
+        skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
         # set negative values to zero in the dataframe Nbinned
         # TODO: zero? Oh really? Nan would be better, no ?
         temp = self.Nbinned.iloc[:,skip:]
@@ -1539,6 +1539,37 @@ class MainWindow(QMainWindow):
         # self.Ninv['bins'] = pd.unique(pd.cut(self.data_df['satflow'],bin_lims))
         
         return self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot
+
+    def validate_scans(self):
+        print(self.Nbinned)
+        print("Nbinned columns:", self.Nbinned.columns)
+        print("scan_start_time:", self.scan_start_time)
+        print("n_scans:", self.n_scans)
+
+        invalid_scans = [] # indexes of invalid scans, removed before step inversion
+
+        # TODO validate scans by checking scan times and start and end values
+        # add invalid scans to invalid_scans list and process below
+
+        # set scan indexes for testing
+        #invalid_scans = [3, 8]
+
+        skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
+        for scan in invalid_scans:
+            # remove matching column of Nbinned
+            self.Nbinned.drop(self.Nbinned.columns[skip+scan], axis=1, inplace=True)
+            # remove matching scan_start_time value
+            self.scan_start_time = np.delete(self.scan_start_time, 8)
+            # remove one n_scans value from end (keep number order)
+            self.n_scans = np.delete(self.n_scans, -1)
+        
+        print("Nbinned columns after validation:", self.Nbinned.columns)
+        print("scan_start_time after validation:", self.scan_start_time)
+        print("n_scans after validation:", self.n_scans)
+        # reset Nbinned column numbering
+        self.Nbinned.columns = ['lower', 'upper', 'bins', 'UpperDp', 'LowerDp', 'dlogDp', 'MaxDeteff'] + [f'scanN{i}' for i in range(len(self.n_scans))]
+        print("Nbinned columns after reset:", self.Nbinned.columns)
+        # TODO raw plot marker position is not updated after validation, so it still points at the second last scan time that was removed
 
     def step_inversion(self):
 
@@ -1556,10 +1587,8 @@ class MainWindow(QMainWindow):
             temp['dN'+str(i)] = temp['dN'+str(i)].diff()/ self.Ninv['dlogDp']/self.Ninv['MaxDeteff']
             # merge temp to Ninv
             self.Ninv = self.Ninv.merge(temp, how = 'left',on='bins')
-        
-        # TODO change skip (n_len_metadata) to a more reliable way to skip metadata columns, e.g. by column name:
-        # filter columns that start with 'dN' to leave out metadata columns
-        #temp = self.Ninv.filter(regex='^dN', axis=1)
+
+        skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
 
         # set negative values to nan in the dataframe
         temp = self.Ninv.iloc[:,skip:]
