@@ -1,5 +1,24 @@
 # PSM Inversion Tool - Software change log 
 
+### 0.8.0 - 2025.06.19
+- Scan validation (check scan length and min/max satflow values)
+- Min Dp from calibration file
+
+### 0.7.4 - 2025.06.09
+- CPC time lag correction fix (incorrect values before data gaps)
+- Skip metadata index bug fix (first scan missing in plot)
+
+### 0.7.3 - 2025.04.30
+- Replace inf values with nan
+
+### 0.7.2 - 2025.04.16
+- File load error handling (skip error files)
+
+### 0.7.1 - 2025.04.15
+- Timestamp fractional seconds support (10 Hz data)
+- Partial inversion bug fix
+- Clear button focus after click (reponsive arrow keys)
+
 ### 0.7.0 - 2025.04.02
 - Custom bin limit input
 - Max Dp from calibration file

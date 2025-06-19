@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.7.4"
+version_number = "0.8.0"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -584,7 +584,10 @@ class MainWindow(QMainWindow):
         self.Ninv_avg = None
         self.day_markers = []
         self.model = None
-        self.maxDp = None
+        self.max_dp = None
+        self.min_dp = None
+        self.max_satflow_limit = None
+        self.min_satflow_limit = None
         self.gap_start_times = []
 
         self.extra_features = ExtraFeatures()
@@ -753,9 +756,9 @@ class MainWindow(QMainWindow):
 
                     self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits)
 
-                    # TODO validate scans, remove invalid scans
-                    # TODO add GUI selection to disable this (for short data sets like calibration data)
-                    self.validate_scans()
+                    # check scans and remove faulty ones
+                    if self.data_filtering_btn.isChecked():
+                        self.validate_scans() # modifies: self.Nbinned, self.n_scans, self.scan_start_time, self.scan_start_times_posix
 
                     Sn = self.avg_n_input.text()
                     if Sn == "":
@@ -957,6 +960,7 @@ class MainWindow(QMainWindow):
                         
                     # add mid plot marker on top of data
                     self.mid_plot.addItem(self.mid_plot_marker)
+                    self.mid_plot_marker.setPos(0)
 
                 else:
                     if self.data_df is None and self.calibration_df is None:
@@ -1106,7 +1110,7 @@ class MainWindow(QMainWindow):
                 self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
-                self.update_bin_selection() # update bin selection options according to model and maxDp
+                self.update_bin_selection() # update bin selection options according to model and min/max Dp
 
                 # restore cursor to normal
                 self.application.restoreOverrideCursor()
@@ -1151,11 +1155,17 @@ class MainWindow(QMainWindow):
                 self.calibration_df.columns = ['cal_satflow'] + self.calibration_df.columns[1:].tolist()
                 self.calibration_df.columns = [self.calibration_df.columns[0], 'cal_diameter'] + self.calibration_df.columns[2:].tolist()
                 self.calibration_df.columns = self.calibration_df.columns[:2].tolist() + ['cal_maxdeteff'] + self.calibration_df.columns[3:].tolist()
-                self.maxDp = self.calibration_df['cal_diameter'].iloc[-1] # read maxDp value and store to variable
+                # store max dp and min dp values to variables
+                self.max_dp = self.calibration_df['cal_diameter'].iloc[-1]
+                self.min_dp = self.calibration_df['cal_diameter'].iloc[0]
+                # store max satflow limit and min satflow limit values to variables
+                self.max_satflow_limit = self.calibration_df['cal_satflow'].iloc[0]
+                self.min_satflow_limit = self.calibration_df['cal_satflow'].iloc[-1]
+                print(f"max_dp: {self.max_dp}, min_dp: {self.min_dp}, max_satflow_limit: {self.max_satflow_limit}, min_satflow_limit: {self.min_satflow_limit}")
                 self.calibration_file_label.setText(file_name)
                 self.calibration_file_label.setToolTip(file_name)
                 if new_file: # if new file was loaded (no reload)
-                    self.update_bin_selection() # update bin selection options according to model and maxDp
+                    self.update_bin_selection() # update bin selection options according to model and min/max Dp
             except:
                 self.error_output.append("Error: Calibration file could not be read.")
 
@@ -1408,21 +1418,21 @@ class MainWindow(QMainWindow):
             self.calibration_df = self.extra_features.calibration_fitting_df
         # use cal_fit to define the satflow where the diameter is the upper limit of the instrument
         elif self.model == 'PSM2.0':
-            maxDp = self.maxDp # use maxDp from calibration file
-            satflowlimit = (maxDp - cal_fit[1])/cal_fit[0]
+            max_dp = self.max_dp # use max_dp from calibration file
+            satflowlimit = (max_dp - cal_fit[1])/cal_fit[0]
             # limit satflow lower limit to 0.05
             if satflowlimit < 0.05:
                 satflowlimit = 0.05
             self.calibration_df['cal_satflow'][len(self.calibration_df)-1] = satflowlimit
-            self.calibration_df['cal_diameter'][len(self.calibration_df)-1] = maxDp
+            self.calibration_df['cal_diameter'][len(self.calibration_df)-1] = max_dp
         else:
-            maxDp = self.maxDp # use maxDp from calibration file
-            satflowlimit = (maxDp - cal_fit[1])/cal_fit[0]
+            max_dp = self.max_dp # use max_dp from calibration file
+            satflowlimit = (max_dp - cal_fit[1])/cal_fit[0]
             # limit satflow lower limit to 0.1
             if satflowlimit < 0.1:
                 satflowlimit = 0.1
             self.calibration_df['cal_satflow'][len(self.calibration_df)-1] = satflowlimit
-            self.calibration_df['cal_diameter'][len(self.calibration_df)-1] = maxDp
+            self.calibration_df['cal_diameter'][len(self.calibration_df)-1] = max_dp
 
         # sort cal dataframe by cal_satflow in descending order and reindex
         self.calibration_df = self.calibration_df.sort_values(by=['cal_satflow'], ascending=False)
@@ -1526,50 +1536,77 @@ class MainWindow(QMainWindow):
             # merge temp to Nbinned
             self.Nbinned = self.Nbinned.merge(temp, how = 'left',on='bins')
 
+        # set negative values in Nbinned to nan
         skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
-        # set negative values to zero in the dataframe Nbinned
-        # TODO: zero? Oh really? Nan would be better, no ?
         temp = self.Nbinned.iloc[:,skip:]
-        temp[temp<0] = 0
+        temp[temp<0] = np.nan
         self.Nbinned.iloc[:,skip:] = temp
-        #self.Nbinned['Dp'] = geom_means(fixed_bin_limits)
-
-        # TODO: changed fron np.unique which fails, to pd.unique. What is wanted out from this?
-        # Commented out? Wrong?
-        # self.Ninv['bins'] = pd.unique(pd.cut(self.data_df['satflow'],bin_lims))
         
         return self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot
 
+    # validate scans by checking scan lengths and start and end values
     def validate_scans(self):
-        print(self.Nbinned)
-        print("Nbinned columns:", self.Nbinned.columns)
-        print("scan_start_time:", self.scan_start_time)
-        print("n_scans:", self.n_scans)
 
-        invalid_scans = [] # indexes of invalid scans, removed before step inversion
+        if len(self.n_scans) < 3:
+            print("Not enough scans to validate.")
+            return
 
-        # TODO validate scans by checking scan times and start and end values
-        # add invalid scans to invalid_scans list and process below
+        faulty_scans = [] # indexes of faulty scans
 
-        # set scan indexes for testing
-        #invalid_scans = [3, 8]
-
-        skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
-        for scan in invalid_scans:
-            # remove matching column of Nbinned
-            self.Nbinned.drop(self.Nbinned.columns[skip+scan], axis=1, inplace=True)
-            # remove matching scan_start_time value
-            self.scan_start_time = np.delete(self.scan_start_time, 8)
-            # remove one n_scans value from end (keep number order)
-            self.n_scans = np.delete(self.n_scans, -1)
+        # check scan lengths
+        print("Validating scan lengths...")
+        # get median length between scan start times
+        median_length = np.median(np.diff(self.scan_start_times_posix))
+        print(f"Median scan length: {median_length} seconds")
+        #print("Scan lengths:", np.diff(self.scan_start_times_posix))
+        time_variation_limit = median_length * 0.05 # 5% variation allowed
+        for i in range(len(self.scan_start_times_posix)-1): # skip last scan, no comparison value
+            # compare scan length to median length
+            scan_length = self.scan_start_times_posix[i+1] - self.scan_start_times_posix[i]
+            # if scan length is much longer than median length, mark as faulty scan
+            if scan_length > median_length + time_variation_limit:
+                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+                print(f"Scan {i} at {scan_start_time_str} has faulty length: {scan_length} seconds")
+                faulty_scans.append(i)
         
-        print("Nbinned columns after validation:", self.Nbinned.columns)
-        print("scan_start_time after validation:", self.scan_start_time)
-        print("n_scans after validation:", self.n_scans)
+        # check scan start and end values
+        print("Validating scan start and end values...")
+        max_satflow_limit = self.max_satflow_limit
+        min_satflow_limit = self.min_satflow_limit
+        print(f"Max satflow limit: {max_satflow_limit}, Min satflow limit: {min_satflow_limit}")
+        # check min and max satflow values of each scan
+        for i in range(len(self.n_scans)):
+            scan_max_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].max()
+            scan_min_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].min()
+            # if max satflow doesn't go past max_satflow_limit, mark as faulty scan
+            if scan_max_satflow <= max_satflow_limit:
+                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+                print(f"Scan {i} at {scan_start_time_str} has faulty max satflow: {scan_max_satflow}")
+                if i not in faulty_scans:
+                    faulty_scans.append(i)
+            # if scan min satflow doesn't go below min_satflow_limit, mark as faulty scan
+            if scan_min_satflow >= min_satflow_limit: # lowest satflow at highest bin edge
+                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+                print(f"Scan {i} at {scan_start_time_str} has faulty min satflow: {scan_min_satflow}")
+                if i not in faulty_scans:
+                    faulty_scans.append(i)
+
+        # remove faulty scans from relevant dataframes and lists
+        # remove matching columns of Nbinned
+        skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
+        faulty_scans_skip = faulty_scans.copy()
+        for i in range(len(faulty_scans_skip)):
+            faulty_scans_skip[i] += skip # increment each scan index value by skip value
+        self.Nbinned.drop(self.Nbinned.columns[faulty_scans_skip], axis=1, inplace=True)
+        # remove matching scan_start_time and scan_start_times_posix values
+        self.scan_start_time = np.delete(self.scan_start_time, faulty_scans)
+        self.scan_start_times_posix = np.delete(self.scan_start_times_posix, faulty_scans)
+        # remove matching amount of n_scans values from end (keep number order)
+        self.n_scans = self.n_scans[:-len(faulty_scans)]
         # reset Nbinned column numbering
         self.Nbinned.columns = ['lower', 'upper', 'bins', 'UpperDp', 'LowerDp', 'dlogDp', 'MaxDeteff'] + [f'scanN{i}' for i in range(len(self.n_scans))]
-        print("Nbinned columns after reset:", self.Nbinned.columns)
-        # TODO raw plot marker position is not updated after validation, so it still points at the second last scan time that was removed
+
+        print(f"Removed {len(faulty_scans)} faulty scans.")
 
     def step_inversion(self):
 
@@ -1588,13 +1625,6 @@ class MainWindow(QMainWindow):
             # merge temp to Ninv
             self.Ninv = self.Ninv.merge(temp, how = 'left',on='bins')
 
-        skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
-
-        # set negative values to nan in the dataframe
-        temp = self.Ninv.iloc[:,skip:]
-        temp[temp<0] = np.nan
-        #temp[temp<0.01] = np.nan
-        self.Ninv.iloc[:,skip:] = temp
         # Drop the first row of the dataframe Ninv (as this is only the first bin edge)
         self.Ninv = self.Ninv.drop(self.Ninv.index[0])
         self.Ninv['UpperDp'] = np.flip(self.bin_lims[1:])
@@ -1612,10 +1642,6 @@ class MainWindow(QMainWindow):
             # merge temp to Ninv
             self.Ninv_avg = self.Ninv_avg.merge(temp, how = 'left',on='bins')
 
-        # set negative values to nan in the dataframe
-        temp = self.Ninv_avg.iloc[:,skip:]
-        temp[temp<0] = np.nan
-        self.Ninv_avg.iloc[:,skip:] = temp
         # Drop the first row of the dataframe Ninv (as this is only the first bin edge)
         self.Ninv_avg = self.Ninv_avg.drop(self.Ninv_avg.index[0])
         self.Ninv_avg['UpperDp'] = np.flip(self.bin_lims[1:])
@@ -1636,7 +1662,7 @@ class MainWindow(QMainWindow):
         print("Marker position:", marker_x)
 
     def sync_markers(self, marker):
-        
+
         # mid_plot_marker range = [0, n_scans]
         # raw_plot_marker range = [posix_timestamps[0],posix_timestamps[-1]]
         if marker is self.raw_plot_marker:
@@ -1657,8 +1683,8 @@ class MainWindow(QMainWindow):
         # add checkbox logic here
     
     def update_bin_selection(self):
-        # make sure model and maxDp are defined (data and calibration files are loaded)
-        if self.model is None or self.maxDp is None:
+        # make sure model and max_dp are defined (data and calibration files are loaded)
+        if self.model is None or self.max_dp is None:
             return
         # check if bin_selection is set to "custom"
         if self.bin_selection.currentText() == "custom":
@@ -1667,34 +1693,40 @@ class MainWindow(QMainWindow):
             custom_bins = False # set bin_selection to default value
         # clear bin_selection before adding new items
         self.bin_selection.clear()
-        # set largest bin limit according to maxDp from calibration file
-        maxDp = self.maxDp
-        # convert maxDp to integer if it's a whole number
-        if maxDp == int(maxDp):
-            maxDp = int(maxDp)
+        # set largest bin limit according to max_dp from calibration file
+        max_dp = self.max_dp
+        # convert max_dp to integer if it's a whole number
+        if max_dp == int(max_dp):
+            max_dp = int(max_dp)
+        # set smallest bin limit according to min_dp from calibration file
+        min_dp = self.min_dp
+        # convert min_dp to integer if it's a whole number
+        if min_dp == int(min_dp):
+            min_dp = int(min_dp)
         # define bin limits
         if self.model == 'PSM2.0':
             bin_limits = [
-                [1.19, 1.5, 2.5, 5, maxDp],
-                [1.19, 1.5, 1.7, 2.5, 5, 8, maxDp],
-                [1.19, 1.3, 1.5, 1.7, 2.5, 3, 5, 8, maxDp],
-                [1.19, 1.3, 1.5, 1.7, 2.5, 3, 4, 5, 8, 10, maxDp],
-                [1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 4, 5, 8, 10, maxDp],
-                [1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, maxDp]
+                [min_dp, 1.5, 2.5, 5, max_dp],
+                [min_dp, 1.5, 1.7, 2.5, 5, 8, max_dp],
+                [min_dp, 1.3, 1.5, 1.7, 2.5, 3, 5, 8, max_dp],
+                [min_dp, 1.3, 1.5, 1.7, 2.5, 3, 4, 5, 8, 10, max_dp],
+                [min_dp, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 4, 5, 8, 10, max_dp],
+                [min_dp, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, max_dp]
                 ]
         elif self.model == 'A10':
             bin_limits = [
-                [1.19, 1.5, 1.7, 2.5, maxDp],
-                [1.19, 1.3, 1.5, 1.7, 2.5, 3, maxDp]
+                [min_dp, 1.5, 1.7, 2.5, max_dp],
+                [min_dp, 1.3, 1.5, 1.7, 2.5, 3, max_dp]
                 ]
         # clean up bin limits and add to dictionary
         self.bin_dict = {}
         for bin_list in bin_limits:
             bin_list.sort() # sort bin limits in ascending order
             bin_list = list(dict.fromkeys(bin_list)) # remove duplicate bin limit values
-            bin_list_filtered = list(filter(lambda x: x <= maxDp, bin_list)) # remove bin limits larger than maxDp
+            bin_list_max_filtered = list(filter(lambda x: x <= max_dp, bin_list)) # remove bin limits larger than max_dp
+            bin_list_min_filtered = list(filter(lambda x: x >= min_dp, bin_list_max_filtered)) # remove bin limits smaller than min_dp
             # add to dictionary with bin amount as key and bin limit list as value
-            self.bin_dict[str(len(bin_list_filtered)-1)] = bin_list_filtered
+            self.bin_dict[str(len(bin_list_min_filtered)-1)] = bin_list_min_filtered
         # add bin amounts to bin_selection
         bin_amounts = ["custom"]
         for i in self.bin_dict.keys():
