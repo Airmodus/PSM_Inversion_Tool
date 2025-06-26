@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.1"
+version_number = "0.8.2"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -1528,6 +1528,7 @@ class MainWindow(QMainWindow):
 
         if len(self.n_scans) < 3:
             print("Not enough scans to validate.")
+            self.error_output.append("Not enough scans to validate.\n")
             return
 
         faulty_scans = [] # indexes of faulty scans
@@ -1570,6 +1571,11 @@ class MainWindow(QMainWindow):
                 if i not in faulty_scans:
                     faulty_scans.append(i)
 
+        # if no faulty scans found, return
+        if len(faulty_scans) == 0:
+            print("No faulty scans found.")
+            self.error_output.append("No faulty scans found.\n")
+            return
         # remove faulty scans from relevant dataframes and lists
         # remove matching columns of Nbinned
         skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
@@ -1585,7 +1591,12 @@ class MainWindow(QMainWindow):
         # reset Nbinned column numbering
         self.Nbinned.columns = ['lower', 'upper', 'bins', 'UpperDp', 'LowerDp', 'dlogDp', 'MaxDeteff'] + [f'scanN{i}' for i in range(len(self.n_scans))]
 
-        print(f"Removed {len(faulty_scans)} faulty scans.")
+        if len(faulty_scans) == 1:
+            print("Removed 1 faulty scan.")
+            self.error_output.append("Removed 1 faulty scan.\n")
+        else:
+            print(f"Removed {len(faulty_scans)} faulty scans.")
+            self.error_output.append(f"Removed {len(faulty_scans)} faulty scans.\n")
 
     def step_inversion(self):
 

@@ -1,5 +1,9 @@
 # PSM Inversion Tool - Software change log 
 
+### 0.8.2 - 2025.06.26
+- Scan validation bug fix (when no faulty scans)
+- Scan validation GUI info message
+
 ### 0.8.1 - 2025.06.26
 - Marker sync and initial position fix
 
