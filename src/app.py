@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.0"
+version_number = "0.8.1"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -48,9 +48,8 @@ class TimeAxisItemForRaw(pg.AxisItem):
         return values
 
 class TimeAxisItemForContour(pg.AxisItem):
-    def __init__(self,marker,scan_start_time, *args, **kwargs):
+    def __init__(self,scan_start_time, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.marker = marker
         self.scan_start_time = scan_start_time
     def tickStrings(self, values, scale, spacing):
         ticks = []
@@ -279,8 +278,8 @@ class MainWindow(QMainWindow):
 
         # this will be set to True the first time invert_and_plot is called
         self.markers_added = False
-        self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=False,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
-        self.raw_plot_marker.hide()
+        self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
+        self.raw_plot_marker.sigDragged.connect(self.sync_markers)
 
         # - main_layout/graph_layout
         # Plots (three plots: raw, mid, time dist)
@@ -314,6 +313,9 @@ class MainWindow(QMainWindow):
         self.mid_layout = QGridLayout()
 
         self.mid_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
+        self.mid_plot_marker.sigDragged.connect(self.sync_markers)
+        self.mid_plot_marker.sigPositionChanged.connect(self.update_plot)
+        self.mid_plot_marker.sigPositionChanged.connect(self.update_plot_title)
 
         self.mid_plot = pg.PlotWidget(background='w',title="Contour")
         # Get the title label and set its font properties
@@ -613,8 +615,6 @@ class MainWindow(QMainWindow):
         self.mid_plot.clear()
         self.mid_color_bar_plot.clear()
         self.size_dist_plot.clear()
-        self.raw_plot_marker.hide()
-        self.raw_plot_marker.setMovable(False)
         self.markers_added = False
 
     def plot_raw(self):
@@ -661,10 +661,6 @@ class MainWindow(QMainWindow):
 
             self.raw_plot.addItem(scatter_plot_item)
             self.raw_plot.showGrid(x=True, y=True)
-
-            # add raw plot marker on top of data
-            self.raw_plot_marker.setPos(0)
-            self.raw_plot.addItem(self.raw_plot_marker)
 
             # putting the date in the title
             formatted_date = str(self.data_df['t'][0]).split()[0] 
@@ -784,7 +780,7 @@ class MainWindow(QMainWindow):
                     x = self.scan_start_time
                     #x = (x - np.datetime64('1970-01-01T00:00:00'))
                     # adding bottom axis to the plot
-                    self.mid_plot.getPlotItem().setAxisItems({'bottom': TimeAxisItemForContour(self.mid_plot_marker,x,orientation='bottom')})
+                    self.mid_plot.getPlotItem().setAxisItems({'bottom': TimeAxisItemForContour(x,orientation='bottom')})
                     self.mid_plot.setLabel('bottom','Time')
                     self.mid_plot.setLabel('left', "Diameter [nm]")
                     # Set the y range to the min and max of the diameter from the bin lims
@@ -805,31 +801,12 @@ class MainWindow(QMainWindow):
                     # it just removes vertical grid from the plot...
                     self.mid_plot.getPlotItem().getAxis('bottom').setGrid(0)
 
-
-                    # setting log scale for y
-                    # we always need to add mid_plot_marker again since we clear the mid_plot
-                    self.mid_plot_marker.setBounds((0, len(x)-1))
-                    # not everything tho
+                    # add raw plot marker if not yet added
                     if not self.markers_added:
-                        self.raw_plot_marker.setMovable(True)
-                        self.raw_plot_marker.show()
-                        self.raw_plot_marker.setPos(self.posix_timestamps.iloc[0])
+                        # add raw plot marker on top of data
+                        self.raw_plot.addItem(self.raw_plot_marker)
                         self.raw_plot_marker.setBounds((self.posix_timestamps.iloc[0], self.posix_timestamps.iloc[-1]))
-                        self.raw_plot_marker.sigPositionChanged.connect(self.update_plot)
-                        self.raw_plot_marker.sigPositionChanged.connect(self.update_plot_title)
-                        self.raw_plot_marker.sigPositionChanged.connect(self.sync_markers)
-                        
-                        # removed connection to update_plot and update_plot_title since these are already called through sync_markers -> raw_plot_marker.sigPositionChanged
-                        self.mid_plot_marker.setPos(0)
-                        #self.mid_plot_marker.sigPositionChanged.connect(self.update_plot)
-                        #self.mid_plot_marker.sigPositionChanged.connect(self.update_plot_title)
-                        self.mid_plot_marker.sigPositionChanged.connect(self.sync_markers)
-
                         self.markers_added = True
-
-                        self.update_plot_title()
-                        self.update_plot()
-
 
                     # Convert numpy.datetime64 array to a POSIX timestamp array
                     skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
@@ -960,7 +937,9 @@ class MainWindow(QMainWindow):
                         
                     # add mid plot marker on top of data
                     self.mid_plot.addItem(self.mid_plot_marker)
+                    self.mid_plot_marker.setBounds((0, len(x)-1))
                     self.mid_plot_marker.setPos(0)
+                    self.sync_markers(self.mid_plot_marker)
 
                 else:
                     if self.data_df is None and self.calibration_df is None:

@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log 
 
+### 0.8.1 - 2025.06.26
+- Marker sync and initial position fix
+
 ### 0.8.0 - 2025.06.19
 - Scan validation (check scan length and min/max satflow values)
 - Min Dp from calibration file
