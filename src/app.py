@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.7.1"
+version_number = "0.8.2"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -48,9 +48,8 @@ class TimeAxisItemForRaw(pg.AxisItem):
         return values
 
 class TimeAxisItemForContour(pg.AxisItem):
-    def __init__(self,marker,scan_start_time, *args, **kwargs):
+    def __init__(self,scan_start_time, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.marker = marker
         self.scan_start_time = scan_start_time
     def tickStrings(self, values, scale, spacing):
         ticks = []
@@ -279,8 +278,8 @@ class MainWindow(QMainWindow):
 
         # this will be set to True the first time invert_and_plot is called
         self.markers_added = False
-        self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=False,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
-        self.raw_plot_marker.hide()
+        self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
+        self.raw_plot_marker.sigDragged.connect(self.sync_markers)
 
         # - main_layout/graph_layout
         # Plots (three plots: raw, mid, time dist)
@@ -314,6 +313,9 @@ class MainWindow(QMainWindow):
         self.mid_layout = QGridLayout()
 
         self.mid_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
+        self.mid_plot_marker.sigDragged.connect(self.sync_markers)
+        self.mid_plot_marker.sigPositionChanged.connect(self.update_plot)
+        self.mid_plot_marker.sigPositionChanged.connect(self.update_plot_title)
 
         self.mid_plot = pg.PlotWidget(background='w',title="Contour")
         # Get the title label and set its font properties
@@ -584,7 +586,11 @@ class MainWindow(QMainWindow):
         self.Ninv_avg = None
         self.day_markers = []
         self.model = None
-        self.maxDp = None
+        self.max_dp = None
+        self.min_dp = None
+        self.max_satflow_limit = None
+        self.min_satflow_limit = None
+        self.gap_start_times = []
 
         self.extra_features = ExtraFeatures()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
@@ -601,21 +607,24 @@ class MainWindow(QMainWindow):
         custom_bin_limits = calculate_bin_limits(min_size, max_size, num_bins)
         # call invert_and_plot with custom bin limits as kwarg
         self.invert_and_plot(bin_limits = custom_bin_limits)
+    
+    # clear all plots and markers
+    def clear_plots(self):
+        self.raw_plot.clear()
+        self.color_bar_plot.clear()
+        self.mid_plot.clear()
+        self.mid_color_bar_plot.clear()
+        self.size_dist_plot.clear()
+        self.markers_added = False
 
     def plot_raw(self):
         """
         Plots the raw data on the left graph right after getting the data file
         """
         if self.data_df is not None:
-
-            self.raw_plot.clear()
-            self.color_bar_plot.clear()
-            self.mid_plot.clear()
-            self.mid_color_bar_plot.clear()
-            self.size_dist_plot.clear()
-            self.raw_plot_marker.hide()
-            self.raw_plot_marker.setMovable(False)
-            self.markers_added = False
+            
+            # clear all plots and markers
+            self.clear_plots()
 
             # Convert Timestamp objects to POSIX timestamps
             self.posix_timestamps = self.data_df['t'].apply(lambda x: x.timestamp())
@@ -652,10 +661,6 @@ class MainWindow(QMainWindow):
 
             self.raw_plot.addItem(scatter_plot_item)
             self.raw_plot.showGrid(x=True, y=True)
-
-            # add raw plot marker on top of data
-            self.raw_plot_marker.setPos(0)
-            self.raw_plot.addItem(self.raw_plot_marker)
 
             # putting the date in the title
             formatted_date = str(self.data_df['t'][0]).split()[0] 
@@ -715,6 +720,8 @@ class MainWindow(QMainWindow):
 
     def invert_and_plot(self, **kwargs):
 
+        start_time = time.time() # store start time for process time measurement
+
         self.invert_and_plot_btn.clearFocus()
         # set cursor to loading
         self.application.setOverrideCursor(Qt.WaitCursor)
@@ -745,6 +752,10 @@ class MainWindow(QMainWindow):
 
                     self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits)
 
+                    # check scans and remove faulty ones
+                    if self.data_filtering_btn.isChecked():
+                        self.validate_scans() # modifies: self.Nbinned, self.n_scans, self.scan_start_time, self.scan_start_times_posix
+
                     Sn = self.avg_n_input.text()
                     if Sn == "":
                         Sn = 5
@@ -769,7 +780,7 @@ class MainWindow(QMainWindow):
                     x = self.scan_start_time
                     #x = (x - np.datetime64('1970-01-01T00:00:00'))
                     # adding bottom axis to the plot
-                    self.mid_plot.getPlotItem().setAxisItems({'bottom': TimeAxisItemForContour(self.mid_plot_marker,x,orientation='bottom')})
+                    self.mid_plot.getPlotItem().setAxisItems({'bottom': TimeAxisItemForContour(x,orientation='bottom')})
                     self.mid_plot.setLabel('bottom','Time')
                     self.mid_plot.setLabel('left', "Diameter [nm]")
                     # Set the y range to the min and max of the diameter from the bin lims
@@ -790,34 +801,15 @@ class MainWindow(QMainWindow):
                     # it just removes vertical grid from the plot...
                     self.mid_plot.getPlotItem().getAxis('bottom').setGrid(0)
 
-
-                    # setting log scale for y
-                    # we always need to add mid_plot_marker again since we clear the mid_plot
-                    self.mid_plot_marker.setBounds((0, len(x)-1))
-                    # not everything tho
+                    # add raw plot marker if not yet added
                     if not self.markers_added:
-                        self.raw_plot_marker.setMovable(True)
-                        self.raw_plot_marker.show()
-                        self.raw_plot_marker.setPos(self.posix_timestamps.iloc[0])
+                        # add raw plot marker on top of data
+                        self.raw_plot.addItem(self.raw_plot_marker)
                         self.raw_plot_marker.setBounds((self.posix_timestamps.iloc[0], self.posix_timestamps.iloc[-1]))
-                        self.raw_plot_marker.sigPositionChanged.connect(self.update_plot)
-                        self.raw_plot_marker.sigPositionChanged.connect(self.update_plot_title)
-                        self.raw_plot_marker.sigPositionChanged.connect(self.sync_markers)
-                        
-                        # removed connection to update_plot and update_plot_title since these are already called through sync_markers -> raw_plot_marker.sigPositionChanged
-                        self.mid_plot_marker.setPos(0)
-                        #self.mid_plot_marker.sigPositionChanged.connect(self.update_plot)
-                        #self.mid_plot_marker.sigPositionChanged.connect(self.update_plot_title)
-                        self.mid_plot_marker.sigPositionChanged.connect(self.sync_markers)
-
                         self.markers_added = True
 
-                        self.update_plot_title()
-                        self.update_plot()
-
-
                     # Convert numpy.datetime64 array to a POSIX timestamp array
-                    skip = self.n_len_metadata
+                    skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
                     y = self.Dplot
                     print("y", y)     
                     if self.avg_vs_raw_combobox.currentText() == 'Raw':
@@ -945,6 +937,9 @@ class MainWindow(QMainWindow):
                         
                     # add mid plot marker on top of data
                     self.mid_plot.addItem(self.mid_plot_marker)
+                    self.mid_plot_marker.setBounds((0, len(x)-1))
+                    self.mid_plot_marker.setPos(0)
+                    self.sync_markers(self.mid_plot_marker)
 
                 else:
                     if self.data_df is None and self.calibration_df is None:
@@ -964,6 +959,10 @@ class MainWindow(QMainWindow):
             self.error_output.append("Error inverting data:")
             self.error_output.append(str(e))
             self.application.restoreOverrideCursor() # restore cursor to normal
+        
+        # print processing time in seconds
+        processing_time = time.time() - start_time
+        print(f"Processing time: {processing_time:.2f} seconds")
     
     def read_file(self):
         # determine device model by checking if "YYYY.MM.DD hh:mm:ss" is in file header
@@ -979,7 +978,6 @@ class MainWindow(QMainWindow):
                 elif self.model != 'PSM2.0':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
                 # set parameters according to PSM 2.0
-                self.n_len_metadata = 7
                 self.CPC_time_lag = -3
             else: # A10
                 print("A10")
@@ -991,7 +989,6 @@ class MainWindow(QMainWindow):
                 elif self.model != 'A10':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
                 # set parameters according to A10
-                self.n_len_metadata = 7 # TODO: check if correct, not sure about normal PSM
                 self.CPC_time_lag = -3 # Same here, check this number
 
         # Read the temporary file into a DataFrame and rename relevant columns
@@ -1013,14 +1010,30 @@ class MainWindow(QMainWindow):
             # convert time column data to datetime, A10 format: DD.MM.YYYY hh:mm:ss
             current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
 
-        # Apply lag correction to concentration columns (i.e. shift the concentration values up by 4)
+        # Apply lag correction to concentration columns (i.e. shift the concentration values up)
         current_data_df['concentration'] = current_data_df['concentration'].shift(self.CPC_time_lag)
+
+        # replace inf values with nan
+        current_data_df.replace([np.inf, -np.inf], np.nan, inplace=True)
 
         # concatenate dataframe to self.data_df
         self.data_df = pd.concat([self.data_df, current_data_df], ignore_index=True)
 
         self.avg_n_input.setText("5")
         self.ext_dilution_fac_input.setText("1")
+    
+    def find_data_gaps(self):
+        # if there are gaps longer than 2 seconds, store the gap's starting time
+        self.gap_start_times = []
+        for i in range(0, len(self.data_df)-1):
+            # if the time difference between two consecutive rows is greater than 2 seconds
+            if (self.data_df['t'].iloc[i+1] - self.data_df['t'].iloc[i]).total_seconds() > 2:
+                # store the starting time of the gap
+                self.gap_start_times.append(self.data_df['t'].iloc[i])
+                # set concentration values to nan for last seconds before the gap according to CPC_time_lag
+                for j in range(0, abs(self.CPC_time_lag)):
+                    self.data_df.iloc[i-j, self.data_df.columns.get_loc('concentration')] = np.nan
+        print("Gap start times:", self.gap_start_times)
 
     # refreshes data by reloading current files
     def refresh_files(self):
@@ -1059,18 +1072,24 @@ class MainWindow(QMainWindow):
                 self.model = None # reset device model variable
                 self.Ninv = None # reset inversion dataframe
                 self.Ninv_avg = None # reset inversion average dataframe
+                self.gap_start_times = [] # reset gap start times
                 # read each file and append to dataframe
                 for file_name in file_names:
-                    # Create a temporary file and copy the contents of current file
-                    self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
-                    shutil.copy(file_name, self.temp_data_file.name)
-                    # read file contents and concatenate to data_df dataframe
-                    self.read_file()
+                    try:
+                        # Create a temporary file and copy the contents of current file
+                        self.temp_data_file = tempfile.NamedTemporaryFile(delete=False)
+                        shutil.copy(file_name, self.temp_data_file.name)
+                        # read file contents and concatenate to data_df dataframe
+                        self.read_file()
+                    except Exception as e:
+                        # print filename and error message to error output
+                        self.error_output.append(f"Error reading file {file_name.split("/")[-1]}: {str(e)}")
                 
+                self.find_data_gaps() # scan for data gaps
                 self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
-                self.update_bin_selection() # update bin selection options according to model and maxDp
+                self.update_bin_selection() # update bin selection options according to model and min/max Dp
 
                 # restore cursor to normal
                 self.application.restoreOverrideCursor()
@@ -1079,6 +1098,7 @@ class MainWindow(QMainWindow):
                 traceback.print_exc()
                 self.error_output.append("Error loading data files:")
                 self.error_output.append(str(e))
+                self.clear_plots() # clear plots if error occurs
                 self.application.restoreOverrideCursor() # restore cursor to normal
 
             # Replace zero or negative values with a small positive number
@@ -1114,11 +1134,17 @@ class MainWindow(QMainWindow):
                 self.calibration_df.columns = ['cal_satflow'] + self.calibration_df.columns[1:].tolist()
                 self.calibration_df.columns = [self.calibration_df.columns[0], 'cal_diameter'] + self.calibration_df.columns[2:].tolist()
                 self.calibration_df.columns = self.calibration_df.columns[:2].tolist() + ['cal_maxdeteff'] + self.calibration_df.columns[3:].tolist()
-                self.maxDp = self.calibration_df['cal_diameter'].iloc[-1] # read maxDp value and store to variable
+                # store max dp and min dp values to variables
+                self.max_dp = self.calibration_df['cal_diameter'].iloc[-1]
+                self.min_dp = self.calibration_df['cal_diameter'].iloc[0]
+                # store max satflow limit and min satflow limit values to variables
+                self.max_satflow_limit = self.calibration_df['cal_satflow'].iloc[0]
+                self.min_satflow_limit = self.calibration_df['cal_satflow'].iloc[-1]
+                print(f"max_dp: {self.max_dp}, min_dp: {self.min_dp}, max_satflow_limit: {self.max_satflow_limit}, min_satflow_limit: {self.min_satflow_limit}")
                 self.calibration_file_label.setText(file_name)
                 self.calibration_file_label.setToolTip(file_name)
                 if new_file: # if new file was loaded (no reload)
-                    self.update_bin_selection() # update bin selection options according to model and maxDp
+                    self.update_bin_selection() # update bin selection options according to model and min/max Dp
             except:
                 self.error_output.append("Error: Calibration file could not be read.")
 
@@ -1208,8 +1234,7 @@ class MainWindow(QMainWindow):
     def averagedata(self,Sn):
         # Averaging over scans
 
-        # skip metadata columns
-        skip = self.n_len_metadata
+        skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
 
         try:
             # if Sn > 1 make a running average of dN and make a new dataframe called Nbinned_avg
@@ -1372,21 +1397,21 @@ class MainWindow(QMainWindow):
             self.calibration_df = self.extra_features.calibration_fitting_df
         # use cal_fit to define the satflow where the diameter is the upper limit of the instrument
         elif self.model == 'PSM2.0':
-            maxDp = self.maxDp # use maxDp from calibration file
-            satflowlimit = (maxDp - cal_fit[1])/cal_fit[0]
+            max_dp = self.max_dp # use max_dp from calibration file
+            satflowlimit = (max_dp - cal_fit[1])/cal_fit[0]
             # limit satflow lower limit to 0.05
             if satflowlimit < 0.05:
                 satflowlimit = 0.05
             self.calibration_df['cal_satflow'][len(self.calibration_df)-1] = satflowlimit
-            self.calibration_df['cal_diameter'][len(self.calibration_df)-1] = maxDp
+            self.calibration_df['cal_diameter'][len(self.calibration_df)-1] = max_dp
         else:
-            maxDp = self.maxDp # use maxDp from calibration file
-            satflowlimit = (maxDp - cal_fit[1])/cal_fit[0]
+            max_dp = self.max_dp # use max_dp from calibration file
+            satflowlimit = (max_dp - cal_fit[1])/cal_fit[0]
             # limit satflow lower limit to 0.1
             if satflowlimit < 0.1:
                 satflowlimit = 0.1
             self.calibration_df['cal_satflow'][len(self.calibration_df)-1] = satflowlimit
-            self.calibration_df['cal_diameter'][len(self.calibration_df)-1] = maxDp
+            self.calibration_df['cal_diameter'][len(self.calibration_df)-1] = max_dp
 
         # sort cal dataframe by cal_satflow in descending order and reindex
         self.calibration_df = self.calibration_df.sort_values(by=['cal_satflow'], ascending=False)
@@ -1414,8 +1439,6 @@ class MainWindow(QMainWindow):
 
     # Bin the raw data to enable avaraging over scans, and to yield supplementary data for the inversion
     def bin_data(self, bin_limits):
-        # Skip the metadata columns
-        skip = self.n_len_metadata
 
         fixed_bin_limits = bin_limits
         num_bins = len(fixed_bin_limits) - 1 # get number of bins
@@ -1492,18 +1515,88 @@ class MainWindow(QMainWindow):
             # merge temp to Nbinned
             self.Nbinned = self.Nbinned.merge(temp, how = 'left',on='bins')
 
-        # set negative values to zero in the dataframe Nbinned
-        # TODO: zero? Oh really? Nan would be better, no ?
+        # set negative values in Nbinned to nan
+        skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
         temp = self.Nbinned.iloc[:,skip:]
-        temp[temp<0] = 0
+        temp[temp<0] = np.nan
         self.Nbinned.iloc[:,skip:] = temp
-        #self.Nbinned['Dp'] = geom_means(fixed_bin_limits)
-
-        # TODO: changed fron np.unique which fails, to pd.unique. What is wanted out from this?
-        # Commented out? Wrong?
-        # self.Ninv['bins'] = pd.unique(pd.cut(self.data_df['satflow'],bin_lims))
         
         return self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot
+
+    # validate scans by checking scan lengths and start and end values
+    def validate_scans(self):
+
+        if len(self.n_scans) < 3:
+            print("Not enough scans to validate.")
+            self.error_output.append("Not enough scans to validate.\n")
+            return
+
+        faulty_scans = [] # indexes of faulty scans
+
+        # check scan lengths
+        print("Validating scan lengths...")
+        # get median length between scan start times
+        median_length = np.median(np.diff(self.scan_start_times_posix))
+        print(f"Median scan length: {median_length} seconds")
+        #print("Scan lengths:", np.diff(self.scan_start_times_posix))
+        time_variation_limit = median_length * 0.05 # 5% variation allowed
+        for i in range(len(self.scan_start_times_posix)-1): # skip last scan, no comparison value
+            # compare scan length to median length
+            scan_length = self.scan_start_times_posix[i+1] - self.scan_start_times_posix[i]
+            # if scan length is much longer than median length, mark as faulty scan
+            if scan_length > median_length + time_variation_limit:
+                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+                print(f"Scan {i} at {scan_start_time_str} has faulty length: {scan_length} seconds")
+                faulty_scans.append(i)
+        
+        # check scan start and end values
+        print("Validating scan start and end values...")
+        max_satflow_limit = self.max_satflow_limit
+        min_satflow_limit = self.min_satflow_limit
+        print(f"Max satflow limit: {max_satflow_limit}, Min satflow limit: {min_satflow_limit}")
+        # check min and max satflow values of each scan
+        for i in range(len(self.n_scans)):
+            scan_max_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].max()
+            scan_min_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].min()
+            # if max satflow doesn't go past max_satflow_limit, mark as faulty scan
+            if scan_max_satflow <= max_satflow_limit:
+                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+                print(f"Scan {i} at {scan_start_time_str} has faulty max satflow: {scan_max_satflow}")
+                if i not in faulty_scans:
+                    faulty_scans.append(i)
+            # if scan min satflow doesn't go below min_satflow_limit, mark as faulty scan
+            if scan_min_satflow >= min_satflow_limit: # lowest satflow at highest bin edge
+                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+                print(f"Scan {i} at {scan_start_time_str} has faulty min satflow: {scan_min_satflow}")
+                if i not in faulty_scans:
+                    faulty_scans.append(i)
+
+        # if no faulty scans found, return
+        if len(faulty_scans) == 0:
+            print("No faulty scans found.")
+            self.error_output.append("No faulty scans found.\n")
+            return
+        # remove faulty scans from relevant dataframes and lists
+        # remove matching columns of Nbinned
+        skip = 7 # skip 7 metadata columns: lower, upper, bins, UpperDp, LowerDp, dlogDp, MaxDeteff
+        faulty_scans_skip = faulty_scans.copy()
+        for i in range(len(faulty_scans_skip)):
+            faulty_scans_skip[i] += skip # increment each scan index value by skip value
+        self.Nbinned.drop(self.Nbinned.columns[faulty_scans_skip], axis=1, inplace=True)
+        # remove matching scan_start_time and scan_start_times_posix values
+        self.scan_start_time = np.delete(self.scan_start_time, faulty_scans)
+        self.scan_start_times_posix = np.delete(self.scan_start_times_posix, faulty_scans)
+        # remove matching amount of n_scans values from end (keep number order)
+        self.n_scans = self.n_scans[:-len(faulty_scans)]
+        # reset Nbinned column numbering
+        self.Nbinned.columns = ['lower', 'upper', 'bins', 'UpperDp', 'LowerDp', 'dlogDp', 'MaxDeteff'] + [f'scanN{i}' for i in range(len(self.n_scans))]
+
+        if len(faulty_scans) == 1:
+            print("Removed 1 faulty scan.")
+            self.error_output.append("Removed 1 faulty scan.\n")
+        else:
+            print(f"Removed {len(faulty_scans)} faulty scans.")
+            self.error_output.append(f"Removed {len(faulty_scans)} faulty scans.\n")
 
     def step_inversion(self):
 
@@ -1521,16 +1614,7 @@ class MainWindow(QMainWindow):
             temp['dN'+str(i)] = temp['dN'+str(i)].diff()/ self.Ninv['dlogDp']/self.Ninv['MaxDeteff']
             # merge temp to Ninv
             self.Ninv = self.Ninv.merge(temp, how = 'left',on='bins')
-        
-        # TODO change skip (n_len_metadata) to a more reliable way to skip metadata columns, e.g. by column name:
-        # filter columns that start with 'dN' to leave out metadata columns
-        #temp = self.Ninv.filter(regex='^dN', axis=1)
 
-        # set negative values to nan in the dataframe
-        temp = self.Ninv.iloc[:,skip:]
-        temp[temp<0] = np.nan
-        #temp[temp<0.01] = np.nan
-        self.Ninv.iloc[:,skip:] = temp
         # Drop the first row of the dataframe Ninv (as this is only the first bin edge)
         self.Ninv = self.Ninv.drop(self.Ninv.index[0])
         self.Ninv['UpperDp'] = np.flip(self.bin_lims[1:])
@@ -1548,10 +1632,6 @@ class MainWindow(QMainWindow):
             # merge temp to Ninv
             self.Ninv_avg = self.Ninv_avg.merge(temp, how = 'left',on='bins')
 
-        # set negative values to nan in the dataframe
-        temp = self.Ninv_avg.iloc[:,skip:]
-        temp[temp<0] = np.nan
-        self.Ninv_avg.iloc[:,skip:] = temp
         # Drop the first row of the dataframe Ninv (as this is only the first bin edge)
         self.Ninv_avg = self.Ninv_avg.drop(self.Ninv_avg.index[0])
         self.Ninv_avg['UpperDp'] = np.flip(self.bin_lims[1:])
@@ -1572,7 +1652,7 @@ class MainWindow(QMainWindow):
         print("Marker position:", marker_x)
 
     def sync_markers(self, marker):
-        
+
         # mid_plot_marker range = [0, n_scans]
         # raw_plot_marker range = [posix_timestamps[0],posix_timestamps[-1]]
         if marker is self.raw_plot_marker:
@@ -1593,8 +1673,8 @@ class MainWindow(QMainWindow):
         # add checkbox logic here
     
     def update_bin_selection(self):
-        # make sure model and maxDp are defined (data and calibration files are loaded)
-        if self.model is None or self.maxDp is None:
+        # make sure model and max_dp are defined (data and calibration files are loaded)
+        if self.model is None or self.max_dp is None:
             return
         # check if bin_selection is set to "custom"
         if self.bin_selection.currentText() == "custom":
@@ -1603,34 +1683,40 @@ class MainWindow(QMainWindow):
             custom_bins = False # set bin_selection to default value
         # clear bin_selection before adding new items
         self.bin_selection.clear()
-        # set largest bin limit according to maxDp from calibration file
-        maxDp = self.maxDp
-        # convert maxDp to integer if it's a whole number
-        if maxDp == int(maxDp):
-            maxDp = int(maxDp)
+        # set largest bin limit according to max_dp from calibration file
+        max_dp = self.max_dp
+        # convert max_dp to integer if it's a whole number
+        if max_dp == int(max_dp):
+            max_dp = int(max_dp)
+        # set smallest bin limit according to min_dp from calibration file
+        min_dp = self.min_dp
+        # convert min_dp to integer if it's a whole number
+        if min_dp == int(min_dp):
+            min_dp = int(min_dp)
         # define bin limits
         if self.model == 'PSM2.0':
             bin_limits = [
-                [1.19, 1.5, 2.5, 5, maxDp],
-                [1.19, 1.5, 1.7, 2.5, 5, 8, maxDp],
-                [1.19, 1.3, 1.5, 1.7, 2.5, 3, 5, 8, maxDp],
-                [1.19, 1.3, 1.5, 1.7, 2.5, 3, 4, 5, 8, 10, maxDp],
-                [1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 4, 5, 8, 10, maxDp],
-                [1.19, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, maxDp]
+                [min_dp, 1.5, 2.5, 5, max_dp],
+                [min_dp, 1.5, 1.7, 2.5, 5, 8, max_dp],
+                [min_dp, 1.3, 1.5, 1.7, 2.5, 3, 5, 8, max_dp],
+                [min_dp, 1.3, 1.5, 1.7, 2.5, 3, 4, 5, 8, 10, max_dp],
+                [min_dp, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 4, 5, 8, 10, max_dp],
+                [min_dp, 1.3, 1.4, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6.5, 8, 10, max_dp]
                 ]
         elif self.model == 'A10':
             bin_limits = [
-                [1.19, 1.5, 1.7, 2.5, maxDp],
-                [1.19, 1.3, 1.5, 1.7, 2.5, 3, maxDp]
+                [min_dp, 1.5, 1.7, 2.5, max_dp],
+                [min_dp, 1.3, 1.5, 1.7, 2.5, 3, max_dp]
                 ]
         # clean up bin limits and add to dictionary
         self.bin_dict = {}
         for bin_list in bin_limits:
             bin_list.sort() # sort bin limits in ascending order
             bin_list = list(dict.fromkeys(bin_list)) # remove duplicate bin limit values
-            bin_list_filtered = list(filter(lambda x: x <= maxDp, bin_list)) # remove bin limits larger than maxDp
+            bin_list_max_filtered = list(filter(lambda x: x <= max_dp, bin_list)) # remove bin limits larger than max_dp
+            bin_list_min_filtered = list(filter(lambda x: x >= min_dp, bin_list_max_filtered)) # remove bin limits smaller than min_dp
             # add to dictionary with bin amount as key and bin limit list as value
-            self.bin_dict[str(len(bin_list_filtered)-1)] = bin_list_filtered
+            self.bin_dict[str(len(bin_list_min_filtered)-1)] = bin_list_min_filtered
         # add bin amounts to bin_selection
         bin_amounts = ["custom"]
         for i in self.bin_dict.keys():

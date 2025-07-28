@@ -11,7 +11,8 @@
 
 # Distribution / packaging
 .Python
-build/
+build/*
+!build/build.bat
 develop-eggs/
 dist/
 downloads/
