@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.2"
+version_number = "0.8.3"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -1428,6 +1428,8 @@ class MainWindow(QMainWindow):
         nan_filler[:] = np.nan
 
         self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
+        # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
+        self.data_df = self.data_df[self.data_df['up_scan'] != 0]
 
         # Add scan number from the point of changing scans
         self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
@@ -1455,7 +1457,6 @@ class MainWindow(QMainWindow):
 
         # add bins column
         self.data_df['bins'] = pd.cut(self.data_df['satflow'],bins)
-        self.data_df['bin_limits'] = pd.cut(self.data_df['satflow'],bins)
 
         # Calculate bin mean concentration grouped by scans and flow bins
         self.data_df['bin_mean_c'] = self.data_df.groupby(['bins', 'scan_no'])['concentration'].transform('mean')
