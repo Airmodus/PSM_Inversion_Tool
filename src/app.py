@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.3"
+version_number = "0.8.4"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -1083,7 +1083,7 @@ class MainWindow(QMainWindow):
                         self.read_file()
                     except Exception as e:
                         # print filename and error message to error output
-                        self.error_output.append(f"Error reading file {file_name.split("/")[-1]}: {str(e)}")
+                        self.error_output.append(f"Error reading file {file_name.split('/')[-1]}:\n{str(e)}")
                 
                 self.find_data_gaps() # scan for data gaps
                 self.display_errors(self.data_df) # display PSM and CPC errors
