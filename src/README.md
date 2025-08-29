@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log 
 
+### 0.8.4 - 2025.08.29
+- Filename split bug fix (error output message)
+
 ### 0.8.3 - 2025.08.27
 - Scan detection numbering bug fix
 
