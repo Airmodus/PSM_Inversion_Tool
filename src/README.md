@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log 
 
+### 0.8.5 - 2025.09.01
+- Logarithmic diameter axis
+
 ### 0.8.4 - 2025.08.29
 - Filename split bug fix (error output message)
 

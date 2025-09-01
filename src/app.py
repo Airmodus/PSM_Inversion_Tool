@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.4"
+version_number = "0.8.5"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -359,8 +359,7 @@ class MainWindow(QMainWindow):
         #self.size_dist_plot.getAxis('left').setStyle(tickTextOffset=-20)
         self.size_dist_plot.showGrid(x=True, y=True)
         # change the y and x-axis to log scale
-        self.size_dist_plot.setLogMode(y=True)
-        #self.size_dist_plot.setLogMode(x=True)
+        self.size_dist_plot.setLogMode(x=True, y=True)
 
         self.graph_layout.addWidget(self.size_dist_plot, stretch=1)
 
