@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.5"
+version_number = "0.8.6"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -266,7 +266,7 @@ class MainWindow(QMainWindow):
         # Create the logo
         top_layout.addStretch()
         self.logo = QLabel()
-        pixmap = QPixmap(resource_path + '/images/Airmodus_white.png')
+        pixmap = QPixmap(resource_path + '/images/airmodus-envea-logo.png')
         self.logo.setPixmap(pixmap)
         top_layout.addWidget(self.logo)
         main_layout.addLayout(top_layout)

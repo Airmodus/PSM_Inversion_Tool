@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log 
 
+### 0.8.6 - 2025.09.01
+- New logo
+
 ### 0.8.5 - 2025.09.01
 - Logarithmic diameter axis
 
