@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.7"
+version_number = "0.8.8"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -358,6 +358,7 @@ class MainWindow(QMainWindow):
         self.avg_vs_raw_combobox.setMaximumWidth(100)
         self.avg_vs_raw_combobox.addItems(["Raw","Average"])
         self.avg_vs_raw_combobox.setCurrentIndex(0)
+        self.avg_vs_raw_combobox.currentIndexChanged.connect(self.update_mid_plot)
         mid_plot_settings.addWidget(self.avg_vs_raw_combobox)
         # create toggle button for day markers and add to mid_plot_settings layout
         self.day_markers_btn = QCheckBox("Day markers")
@@ -749,169 +750,8 @@ class MainWindow(QMainWindow):
                     # Convert Timestamp objects to POSIX timestamps
                     self.posix_timestamps = self.data_df['t'].apply(lambda x: x.timestamp())
 
-
-                    # Contour Plot -----------------------------------------------------
-                    self.mid_plot.clear()
-
-                    # Creates the middle contour plot  
-                    x = self.scan_start_time
-                    #x = (x - np.datetime64('1970-01-01T00:00:00'))
-                    # adding bottom axis to the plot
-                    self.mid_plot.setAxisItems({'bottom': TimeAxisItemForContour(x,orientation='bottom')})
-                    self.mid_plot.setLabel('bottom','Time')
-                    self.mid_plot.setLabel('left', "Diameter [nm]")
-                    # Set the y range to the min and max of the diameter from the bin lims
-                    self.mid_plot.setYRange(np.min(self.Dplot),np.max(self.Dplot))
-
-                    # create ticks for left axis
-                    bin_ticks = []
-                    for i in range(len(self.Dplot)):
-                        # add tick as tuple (value, string)
-                        bin_ticks.append((len(self.Dplot) - (i + 1), str(round(self.Dplot[i], 2))))
-                    print("bin_ticks", bin_ticks)
-                    # set left axis ticks
-                    # https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/axisitem.html#pyqtgraph.AxisItem.setTicks
-                    self.mid_plot.getAxis('left').setTicks([bin_ticks])
-
-                    # add raw plot marker if not yet added
-                    if not self.markers_added:
-                        # add raw plot marker on top of data
-                        self.raw_plot.addItem(self.raw_plot_marker)
-                        self.raw_plot_marker.setBounds((self.posix_timestamps.iloc[0], self.posix_timestamps.iloc[-1]))
-                        self.markers_added = True
-
-                    # Convert numpy.datetime64 array to a POSIX timestamp array
-                    skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
-                    y = self.Dplot
-                    print("y", y)     
-                    if self.avg_vs_raw_combobox.currentText() == 'Raw':
-                        z = np.log10(self.Ninv.iloc[:, skip:].values)
-                    else: # Averaged
-                        z = np.log10(self.Ninv_avg.iloc[:, skip:].values)
-                    # flip the y axis
-                    z = np.flip(z)
-                    # flip the x axis
-                    for i in range(len(z)):
-                        z[i] = np.flip(z[i])
-
-                    # # temporarily replace nan and inf values with zero for min/max calculation
-                    # z_no_nan = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
-                    # min_z = np.min(z_no_nan)
-                    # max_z = np.max(z_no_nan)
-
-                    # replace nan and inf values with zero
-                    z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
-                    # set floor value: change all values below 0.1 to 0.1
-                    z[z < 0.1] = 0.1
-                    min_z = np.min(z)
-                    max_z = np.max(z)
-                    
-                    # round the max value to the next power of ten
-                    max_z = np.ceil(max_z)
-                    min_z = np.floor(min_z)
-
-                    # Scale back to correct concentration
-                    z_normalized = (z-min_z)/(max_z - min_z)
-
-                    # Create the color map
-                    cmap = pg.colormap.get('CET-R4')
-
-                    # # Set the position of the image
-                    # # TODO: All of this is a mess, but this is the place to adjust the scales.
-                    # # HOW ABOUT LOG STUFF? Is the bins even correc? Most likely not
-                    # tr = QTransform()  # prepare ImageItem transformation:
-                    # # Get the number of bins and assing it to nbin
-                    # nbin = len(self.Dplot)-1
-                    # max_size = np.nanmax(y)
-                    # min_size = np.nanmin(y)
-                    # print(min_size, max_size)  
-                    # len_range = max_size-min_size
-                    # pixel_size = len_range/nbin
-
-                    # tr.scale(1, len_range/nbin)       # scale horizontal and vertical axes
-                    # tr.translate(0, min_size/pixel_size) # move 3x3 image to locate center at axis origin
-
-                    self.image_item = pg.ImageItem(image=z_normalized.T)
-                    #self.image_item.setTransform(tr)
-                    self.mid_plot.addItem(self.image_item)
-                    #self.mid_plot.setYRange(np.min(y),np.max(y))
-                    # Set range for the colormap
-                    self.image_item.setLevels([0, 1])
-
-                    if cmap is not None:
-                        self.image_item.setLookupTable(cmap.getLookupTable(0.0, 1.0, 256))
-
-                    # Generate new x and y arrays with the correct scaling
-                    x = pd.date_range(start=x[0], end=x[-1], periods=z_normalized.shape[1])
-                    y = np.linspace(y[0], y[-1], z_normalized.shape[0])
-
-                    # Set the position of the image
-                    #self.image_item.setPos(0,np.min(y))
-
-                    # autoscale mid_plot
-                    self.mid_plot.enableAutoRange(axis='y', enable=True)
-
-                    # NEW
-                    #-------------------------------------------------------------------
-
-                    # Create color bar plot
-                    axis = pg.AxisItem('right')
-                    # Map a value x from one range to another
-                    def map_range(x, in_min, in_max, out_min, out_max):
-                        return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
-
-                    # Calculate the labels for the axis
-                    #ticks = [(map_range(i, 0, 4, 0, 100), f"{min_z+ (max_z - min_z) * (i / 4):.2f}") for i in range(5)]
-                    n_ticks = int(max_z-min_z)
-                    ticks = [(map_range(i, 0, n_ticks, 0, 100), f"{10**(min_z+ (max_z - min_z) * (i / n_ticks)):.0e}") for i in range(n_ticks+1)]
-
-                    # Set the labels for the axis
-                    axis.setTicks([ticks])
-
-                    self.mid_color_bar_plot.setAxisItems({'right':axis})
-                    # Set the range of the color bar plot to match the color bar
-                    self.mid_color_bar_plot.setRange(yRange=[0, 100])
-                    
-                    # Create color bar data
-                    color_bar_data = np.repeat(np.linspace(0, 1, 100).reshape(-1, 1), 10, axis=1).T
-
-                    # change the label offset
-                    #self.mid_color_bar_plot.getAxis('right').setStyle(tickTextOffset=-15)
-
-                    # Create color bar image item
-                    if cmap is not None:
-                        color_bar = pg.ImageItem(color_bar_data, lut=cmap.getLookupTable())
-                        self.mid_color_bar_plot.addItem(color_bar)
-
-                    # Add label to the color bar plot
-                    # self.mid_color_bar_plot.setLabel('left', "dN/dlogDp [cm-3]")
-
-                    # Update the plots in order to show the changes in the dilution factor in the single scan plot
-                    self.update_size_dist_plot()
-
-                    # add day markers to plot if data is from multiple days
-                    # find unique days in scan_start_time
-                    unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
-                    self.day_markers = [] # reset day markers list
-                    if len(unique_days) > 1:
-                        for day in unique_days:
-                            # get first index of day
-                            day_index = np.where(self.scan_start_time.astype('datetime64[D]') == day)[0][0]
-                            # create label for marker
-                            month, day = str(day).split('-')[1:]
-                            day_label = f"{day}/{month}"
-                            # create day marker
-                            day_marker = pg.InfiniteLine(pos=day_index, angle=90, movable=False, pen=pg.mkPen(color=(255, 255, 255, 255), width=1), label=day_label, labelOpts={'position': 0.85, 'anchors': [(0.5, 0.2), (0.5, 0.2)], 'color': (255, 255, 255, 255), 'rotateAxis': (1, 0)})
-                            self.mid_plot.addItem(day_marker) # add to plot
-                            self.day_markers.append(day_marker) # add to list
-                        # show / hide day markers based on user setting
-                        self.toggle_day_markers()
-                        
-                    # add mid plot marker on top of data
-                    self.mid_plot.addItem(self.mid_plot_marker)
-                    self.mid_plot_marker.setBounds((0, len(x)-1))
-                    self.mid_plot_marker.setPos(0)
-                    self.sync_markers(self.mid_plot_marker)
+                    # Update mid plot
+                    self.update_mid_plot()
 
                 else:
                     if self.data_df is None and self.calibration_df is None:
@@ -1228,6 +1068,172 @@ class MainWindow(QMainWindow):
             message = "Unexpected error arose during scan averaging"
             self.error_output.append(message)
 
+    def update_mid_plot(self):
+
+        if self.Ninv is None:
+            return # if no inversion data, do nothing
+
+        self.mid_plot.clear()
+
+        # Creates the middle contour plot  
+        x = self.scan_start_time
+        #x = (x - np.datetime64('1970-01-01T00:00:00'))
+        # adding bottom axis to the plot
+        self.mid_plot.setAxisItems({'bottom': TimeAxisItemForContour(x,orientation='bottom')})
+        self.mid_plot.setLabel('bottom','Time')
+        self.mid_plot.setLabel('left', "Diameter [nm]")
+        # Set the y range to the min and max of the diameter from the bin lims
+        self.mid_plot.setYRange(np.min(self.Dplot),np.max(self.Dplot))
+
+        # create ticks for left axis
+        bin_ticks = []
+        for i in range(len(self.Dplot)):
+            # add tick as tuple (value, string)
+            bin_ticks.append((len(self.Dplot) - (i + 1), str(round(self.Dplot[i], 2))))
+        print("bin_ticks", bin_ticks)
+        # set left axis ticks
+        # https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/axisitem.html#pyqtgraph.AxisItem.setTicks
+        self.mid_plot.getAxis('left').setTicks([bin_ticks])
+
+        # add raw plot marker if not yet added
+        if not self.markers_added:
+            # add raw plot marker on top of data
+            self.raw_plot.addItem(self.raw_plot_marker)
+            self.raw_plot_marker.setBounds((self.posix_timestamps.iloc[0], self.posix_timestamps.iloc[-1]))
+            self.markers_added = True
+
+        # Convert numpy.datetime64 array to a POSIX timestamp array
+        skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
+        y = self.Dplot
+        print("y", y)     
+        if self.avg_vs_raw_combobox.currentText() == 'Raw':
+            z = np.log10(self.Ninv.iloc[:, skip:].values)
+        else: # Averaged
+            z = np.log10(self.Ninv_avg.iloc[:, skip:].values)
+        # flip the y axis
+        z = np.flip(z)
+        # flip the x axis
+        for i in range(len(z)):
+            z[i] = np.flip(z[i])
+
+        # # temporarily replace nan and inf values with zero for min/max calculation
+        # z_no_nan = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
+        # min_z = np.min(z_no_nan)
+        # max_z = np.max(z_no_nan)
+
+        # replace nan and inf values with zero
+        z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
+        # set floor value: change all values below 0.1 to 0.1
+        z[z < 0.1] = 0.1
+        min_z = np.min(z)
+        max_z = np.max(z)
+        
+        # round the max value to the next power of ten
+        max_z = np.ceil(max_z)
+        min_z = np.floor(min_z)
+
+        # Scale back to correct concentration
+        z_normalized = (z-min_z)/(max_z - min_z)
+
+        # Create the color map
+        cmap = pg.colormap.get('CET-R4')
+
+        # # Set the position of the image
+        # # TODO: All of this is a mess, but this is the place to adjust the scales.
+        # # HOW ABOUT LOG STUFF? Is the bins even correc? Most likely not
+        # tr = QTransform()  # prepare ImageItem transformation:
+        # # Get the number of bins and assing it to nbin
+        # nbin = len(self.Dplot)-1
+        # max_size = np.nanmax(y)
+        # min_size = np.nanmin(y)
+        # print(min_size, max_size)  
+        # len_range = max_size-min_size
+        # pixel_size = len_range/nbin
+
+        # tr.scale(1, len_range/nbin)       # scale horizontal and vertical axes
+        # tr.translate(0, min_size/pixel_size) # move 3x3 image to locate center at axis origin
+
+        self.image_item = pg.ImageItem(image=z_normalized.T)
+        #self.image_item.setTransform(tr)
+        self.mid_plot.addItem(self.image_item)
+        #self.mid_plot.setYRange(np.min(y),np.max(y))
+        # Set range for the colormap
+        self.image_item.setLevels([0, 1])
+
+        if cmap is not None:
+            self.image_item.setLookupTable(cmap.getLookupTable(0.0, 1.0, 256))
+
+        # Generate new x and y arrays with the correct scaling
+        x = pd.date_range(start=x[0], end=x[-1], periods=z_normalized.shape[1])
+        y = np.linspace(y[0], y[-1], z_normalized.shape[0])
+
+        # Set the position of the image
+        #self.image_item.setPos(0,np.min(y))
+
+        # autoscale mid_plot
+        self.mid_plot.enableAutoRange(axis='y', enable=True)
+
+        # NEW
+        #-------------------------------------------------------------------
+
+        # Create color bar plot
+        axis = pg.AxisItem('right')
+        # Map a value x from one range to another
+        def map_range(x, in_min, in_max, out_min, out_max):
+            return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+        # Calculate the labels for the axis
+        #ticks = [(map_range(i, 0, 4, 0, 100), f"{min_z+ (max_z - min_z) * (i / 4):.2f}") for i in range(5)]
+        n_ticks = int(max_z-min_z)
+        ticks = [(map_range(i, 0, n_ticks, 0, 100), f"{10**(min_z+ (max_z - min_z) * (i / n_ticks)):.0e}") for i in range(n_ticks+1)]
+
+        # Set the labels for the axis
+        axis.setTicks([ticks])
+
+        self.mid_color_bar_plot.setAxisItems({'right':axis})
+        # Set the range of the color bar plot to match the color bar
+        self.mid_color_bar_plot.setRange(yRange=[0, 100])
+        
+        # Create color bar data
+        color_bar_data = np.repeat(np.linspace(0, 1, 100).reshape(-1, 1), 10, axis=1).T
+
+        # change the label offset
+        #self.mid_color_bar_plot.getAxis('right').setStyle(tickTextOffset=-15)
+
+        # Create color bar image item
+        if cmap is not None:
+            color_bar = pg.ImageItem(color_bar_data, lut=cmap.getLookupTable())
+            self.mid_color_bar_plot.addItem(color_bar)
+
+        # Add label to the color bar plot
+        # self.mid_color_bar_plot.setLabel('left', "dN/dlogDp [cm-3]")
+
+        # Update the plots in order to show the changes in the dilution factor in the single scan plot
+        self.update_size_dist_plot()
+
+        # add day markers to plot if data is from multiple days
+        # find unique days in scan_start_time
+        unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
+        self.day_markers = [] # reset day markers list
+        if len(unique_days) > 1:
+            for day in unique_days:
+                # get first index of day
+                day_index = np.where(self.scan_start_time.astype('datetime64[D]') == day)[0][0]
+                # create label for marker
+                month, day = str(day).split('-')[1:]
+                day_label = f"{day}/{month}"
+                # create day marker
+                day_marker = pg.InfiniteLine(pos=day_index, angle=90, movable=False, pen=pg.mkPen(color=(255, 255, 255, 255), width=1), label=day_label, labelOpts={'position': 0.85, 'anchors': [(0.5, 0.2), (0.5, 0.2)], 'color': (255, 255, 255, 255), 'rotateAxis': (1, 0)})
+                self.mid_plot.addItem(day_marker) # add to plot
+                self.day_markers.append(day_marker) # add to list
+            # show / hide day markers based on user setting
+            self.toggle_day_markers()
+            
+        # add mid plot marker on top of data
+        self.mid_plot.addItem(self.mid_plot_marker)
+        self.mid_plot_marker.setBounds((0, len(x)-1))
+        self.mid_plot_marker.setPos(0)
+        self.sync_markers(self.mid_plot_marker)
     
     def update_size_dist_plot(self):
         """

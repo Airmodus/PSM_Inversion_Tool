@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log 
 
+### 0.8.8 - 2025.09.03
+- Average plot toggle (change view instantly)
+
 ### 0.8.7 - 2025.09.03
 - Plot fixes (uniform layouts and titles)
 
