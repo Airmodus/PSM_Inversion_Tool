@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.6"
+version_number = "0.8.7"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -281,87 +281,65 @@ class MainWindow(QMainWindow):
         self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
         self.raw_plot_marker.sigDragged.connect(self.sync_markers)
 
-        # - main_layout/graph_layout
-        # Plots (three plots: raw, mid, time dist)
+        # Plots (three plots: raw, mid, size dist)
 
-        self.raw_gl = pg.GraphicsLayoutWidget(show=True)
+        # raw plot
+
+        self.raw_gl = pg.GraphicsLayoutWidget()
         self.raw_gl.setBackground('w')
-        self.raw_gl.setWindowTitle('Raw')
 
-        #self.raw_plot = self.raw_gl.addPlot(title="Raw",axisItems={'left': ScientificAxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
-        self.raw_plot = self.raw_gl.addPlot(title="Raw",axisItems={'left': pg.AxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
+        self.raw_plot = self.raw_gl.addPlot(axisItems={'left': pg.AxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
         self.raw_plot.setLabel('left', "Concentration [#/cm3]")
         self.raw_plot.setLabel('bottom', "Time")
         self.raw_plot.showGrid(x=True, y=True)
-        #self.raw_plot.getAxis('left').setStyle(tickTextOffset=-15)
-        #self.raw_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
-        # The following seems to behave weirdly
-        #self.raw_plot.setLogMode(x=False,y=True)
+        self.raw_plot.setTitle(f"Raw data", size="9pt")
+
         self.color_bar_plot = pg.PlotItem()
         self.color_bar_plot.hideAxis('bottom')
         self.color_bar_plot.hideAxis('left')
-        self.color_bar_plot.setLabel('right', "Sat. flow [lpm]")
 
         self.raw_gl.addItem(self.color_bar_plot)
-
         self.raw_gl.ci.layout.setColumnFixedWidth(1, 60)
 
         self.graph_layout.addWidget(self.raw_gl, stretch=1)
 
+        # mid plot
 
-        # main_layout/graph_layout/mid_layout
-        self.mid_layout = QGridLayout()
+        self.mid_gl = pg.GraphicsLayoutWidget()
+        self.mid_gl.setBackground('w')
 
         self.mid_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
         self.mid_plot_marker.sigDragged.connect(self.sync_markers)
-        self.mid_plot_marker.sigPositionChanged.connect(self.update_plot)
-        self.mid_plot_marker.sigPositionChanged.connect(self.update_plot_title)
+        self.mid_plot_marker.sigPositionChanged.connect(self.update_size_dist_plot)
 
-        self.mid_plot = pg.PlotWidget(background='w',title="Contour")
-        # Get the title label and set its font properties
- 
-
-        # create a plot widget with white background and title "Contour" and increased font size
-
-        # putting the ticks inside the plot
-        #self.mid_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
-        #self.mid_plot.getAxis('left').setStyle(tickTextOffset=-15)
-
+        self.mid_plot = self.mid_gl.addPlot()
         self.mid_plot.setLabel('left', "Diameter [nm]")
         self.mid_plot.setLabel('bottom', "Time")
         self.mid_plot.showGrid(x=True, y=True)
-        # setting log scale for y
         #self.mid_plot.setLogMode(y=True)
-        self.mid_layout.addWidget(self.mid_plot,0,0)
+        self.mid_plot.setTitle(f"Inverted size distribution", size="9pt")
         
-        # making the colorbar scene and colorbar for the mid plot
-        self.mid_colorbar_gl= pg.GraphicsLayoutWidget(show=True)
-        self.mid_colorbar_gl.setBackground('w')
         self.mid_color_bar_plot = pg.PlotItem()
         self.mid_color_bar_plot.hideAxis('bottom')
         self.mid_color_bar_plot.hideAxis('left')
-        self.mid_colorbar_gl.addItem(self.mid_color_bar_plot)
-        self.mid_colorbar_gl.ci.layout.setColumnFixedWidth(0, 62)
-        
-        self.mid_layout.addWidget(self.mid_colorbar_gl,0,1)
+        self.mid_gl.addItem(self.mid_color_bar_plot)
+        self.mid_gl.ci.layout.setColumnFixedWidth(1, 60)
 
-        self.mid_layout.setColumnStretch(0, 8)  # column 0 (where the plot is) should take up 8 parts
-        self.mid_layout.setColumnStretch(1, 2)  # column 1 (where the color bar is) should take up 2 parts
+        self.graph_layout.addWidget(self.mid_gl, stretch=1)
 
-        self.mid_layout.setHorizontalSpacing(0)
-        self.graph_layout.addLayout(self.mid_layout, stretch=1)
+        # size dist plot
 
-        #self.size_dist_plot = pg.PlotWidget(background='w',title="Size Distribution",axisItems={'left': LogAxisItem(orientation='left'),'bottom': LogAxisItem(orientation='bottom')})
-        self.size_dist_plot = pg.PlotWidget(background='w',title="Size Distribution",axisItems={'left': LogAxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
+        self.size_dist_gl = pg.GraphicsLayoutWidget()
+        self.size_dist_gl.setBackground('w')
+        self.size_dist_plot = self.size_dist_gl.addPlot(axisItems={'left': LogAxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
         self.size_dist_plot.setLabel('left', "dN/dlogDp [cm-3]")
         self.size_dist_plot.setLabel('bottom', "Diameter [nm]")
-        #self.size_dist_plot.getAxis('bottom').setStyle(tickTextOffset=-20)
-        #self.size_dist_plot.getAxis('left').setStyle(tickTextOffset=-20)
         self.size_dist_plot.showGrid(x=True, y=True)
         # change the y and x-axis to log scale
         self.size_dist_plot.setLogMode(x=True, y=True)
+        self.size_dist_plot.getAxis('left').enableAutoSIPrefix(enable=False)
 
-        self.graph_layout.addWidget(self.size_dist_plot, stretch=1)
+        self.graph_layout.addWidget(self.size_dist_gl, stretch=1)
 
         # Add the graph layout to the main layout.
         main_layout.addLayout(self.graph_layout)
@@ -395,11 +373,11 @@ class MainWindow(QMainWindow):
         # add plot settings layout to main layout
         main_layout.addLayout(plot_settings_layout)
 
-        # - main_layout/controls_layout
+        # controls
+
         controls_layout = QHBoxLayout()
 
         left_layout = QGridLayout()
-
 
         self.load_data_btn = QPushButton("Load data files")
         self.load_data_btn.setObjectName("button")
@@ -671,8 +649,8 @@ class MainWindow(QMainWindow):
                 formatted_date = f'{day}/{month}/{year} - {end_day}/{end_month}/{end_year}'
             else:
                 formatted_date = f'{day}/{month}/{year}'
-            # setting the raw plot title
-            self.raw_plot.setTitle(f"Raw Data {formatted_date}", size="9pt")
+            # setting the plot titles
+            self.raw_plot.setTitle(f"Raw data {formatted_date}", size="9pt")
             self.mid_plot.setTitle(f"Inverted size distribution {formatted_date}", size="9pt")
 
             # Create color bar plot
@@ -779,7 +757,7 @@ class MainWindow(QMainWindow):
                     x = self.scan_start_time
                     #x = (x - np.datetime64('1970-01-01T00:00:00'))
                     # adding bottom axis to the plot
-                    self.mid_plot.getPlotItem().setAxisItems({'bottom': TimeAxisItemForContour(x,orientation='bottom')})
+                    self.mid_plot.setAxisItems({'bottom': TimeAxisItemForContour(x,orientation='bottom')})
                     self.mid_plot.setLabel('bottom','Time')
                     self.mid_plot.setLabel('left', "Diameter [nm]")
                     # Set the y range to the min and max of the diameter from the bin lims
@@ -794,11 +772,6 @@ class MainWindow(QMainWindow):
                     # set left axis ticks
                     # https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/axisitem.html#pyqtgraph.AxisItem.setTicks
                     self.mid_plot.getAxis('left').setTicks([bin_ticks])
-
-                    #self.mid_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
-                    # this is needed to show the ticks inside the plot,
-                    # it just removes vertical grid from the plot...
-                    self.mid_plot.getPlotItem().getAxis('bottom').setGrid(0)
 
                     # add raw plot marker if not yet added
                     if not self.markers_added:
@@ -914,7 +887,7 @@ class MainWindow(QMainWindow):
                     # self.mid_color_bar_plot.setLabel('left', "dN/dlogDp [cm-3]")
 
                     # Update the plots in order to show the changes in the dilution factor in the single scan plot
-                    self.update_plot()
+                    self.update_size_dist_plot()
 
                     # add day markers to plot if data is from multiple days
                     # find unique days in scan_start_time
@@ -1147,7 +1120,7 @@ class MainWindow(QMainWindow):
             except:
                 self.error_output.append("Error: Calibration file could not be read.")
 
-    def update_plot_title(self):
+    def update_size_dist_plot_title(self):
         """
         Update the title of the size_dist_plot to show the scan start time.
         Used when the marker is moved.
@@ -1171,7 +1144,7 @@ class MainWindow(QMainWindow):
         _year,_month,_day = _date.split('-')
         _hour,_minute,_second = _time.split(':')
         formatted_time = f"{_day}/{_month}/{_year} {_hour}:{_minute}:{_second}"
-        self.size_dist_plot.setTitle(f"Scan Start Time: {formatted_time}", size="9pt")
+        self.size_dist_plot.setTitle(f"Scan start time: {formatted_time}", size="9pt")
 
         # if nais data has been loaded, convert scan_start_time to datetime object and send to update_nais()
         if self.nais_data is not None:
@@ -1207,7 +1180,7 @@ class MainWindow(QMainWindow):
                 print("NAIS data loaded successfully")
                 print(self.nais_data)
                 try:
-                    self.update_plot_title()
+                    self.update_size_dist_plot_title()
                 except:
                     print("Error updating plot title")
             except:
@@ -1256,7 +1229,7 @@ class MainWindow(QMainWindow):
             self.error_output.append(message)
 
     
-    def update_plot(self):
+    def update_size_dist_plot(self):
         """
         Update the size_dist_plot to show the selected scan.
         Used when the marker is moved.
@@ -1283,6 +1256,9 @@ class MainWindow(QMainWindow):
         self.size_dist_plot.addLegend(offset=(0, 1),labelTextSize='9pt')
         self.size_dist_plot.plot(x_values, y_values, pen=pg.mkPen(color=(126, 122, 122),style=Qt.DashLine,width=2),symbol=None, name="Single scan")
         self.size_dist_plot.plot(x2_values, y2_values, pen=pg.mkPen(color=(118, 209, 58),width=2), symbol=None, name=f'Average over {self.avg_n_input.text()} scans')
+
+        # update plot title to show current scan start time
+        self.update_size_dist_plot_title()
 
     # when button is clicked, reload data to apply changes
     def remove_errors_clicked(self):
@@ -1666,7 +1642,6 @@ class MainWindow(QMainWindow):
         else:
             cur_pos_scan_index = int(self.mid_plot_marker.getXPos())
             self.raw_plot_marker.setPos(int(self.scan_start_times_posix[cur_pos_scan_index]))
-        #self.update_plot_title()
 
     def checkbox_button_state_changed(self, state):
         print("Checkbox state changed:", state)
