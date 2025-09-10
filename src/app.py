@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.8"
+version_number = "0.8.9"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -1601,6 +1601,12 @@ class MainWindow(QMainWindow):
         self.Ninv = self.Ninv.drop(self.Ninv.index[0])
         self.Ninv['UpperDp'] = np.flip(self.bin_lims[1:])
         self.Ninv['LowerDp'] = np.flip(self.bin_lims[:-1])
+
+        # set all negative values to nan
+        skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
+        temp = self.Ninv.iloc[:, skip:]
+        temp[temp < 0] = np.nan
+        self.Ninv.iloc[:, skip:] = temp
         
         # Repeat the process for the averaged data
         self.Ninv_avg = self.Nbinned[['bins','LowerDp','UpperDp','dlogDp','MaxDeteff']]
@@ -1618,6 +1624,12 @@ class MainWindow(QMainWindow):
         self.Ninv_avg = self.Ninv_avg.drop(self.Ninv_avg.index[0])
         self.Ninv_avg['UpperDp'] = np.flip(self.bin_lims[1:])
         self.Ninv_avg['LowerDp'] = np.flip(self.bin_lims[:-1])
+
+        # set all negative values to nan
+        skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
+        temp = self.Ninv_avg.iloc[:, skip:]
+        temp[temp < 0] = np.nan
+        self.Ninv_avg.iloc[:, skip:] = temp
 
     # show / hide middle plot day markers based on user setting
     def toggle_day_markers(self):

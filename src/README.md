@@ -1,4 +1,7 @@
-# PSM Inversion Tool - Software change log 
+# PSM Inversion Tool - Software change log
+
+### 0.8.9 - 2025.09.10
+- Set negative values to NaN
 
 ### 0.8.8 - 2025.09.03
 - Average plot toggle (change view instantly)
