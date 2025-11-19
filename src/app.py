@@ -381,33 +381,29 @@ class MainWindow(QMainWindow):
         left_layout = QGridLayout()
 
         self.load_data_btn = QPushButton("Load data files")
-        self.load_data_btn.setObjectName("button")
         self.load_data_btn.setFixedWidth(150)
         self.load_data_btn.clicked.connect(self.load_data)
         left_layout.addWidget(self.load_data_btn,0,0)
         self.data_file_label = QLabel("No files selected")
         self.data_file_label.setObjectName("bordered")
-        self.data_file_label.setFixedWidth(250)
+        #self.data_file_label.setFixedWidth(250)
         self.data_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.data_file_label,0,1,1,3)
         self.refresh_file_btn = QPushButton("Refresh files")
-        self.refresh_file_btn.setObjectName("button")
         self.refresh_file_btn.setFixedWidth(150)
         self.refresh_file_btn.clicked.connect(self.refresh_files)
         left_layout.addWidget(self.refresh_file_btn,0,4)
 
         self.load_cal_btn = QPushButton("Load calibration file")
-        self.load_cal_btn.setObjectName("button")
         self.load_cal_btn.setFixedWidth(150)
         self.load_cal_btn.clicked.connect(self.load_calibration)
         left_layout.addWidget(self.load_cal_btn,1,0)
         self.calibration_file_label = QLabel("No file selected")
         self.calibration_file_label.setObjectName("bordered")
-        self.calibration_file_label.setFixedWidth(250)
+        #self.calibration_file_label.setFixedWidth(250)
         self.calibration_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.calibration_file_label,1,1,1,3)
         self.invert_and_plot_btn = QPushButton("Invert and plot")
-        self.invert_and_plot_btn.setObjectName("button")
         self.invert_and_plot_btn.setFixedWidth(150)
         self.invert_and_plot_btn.clicked.connect(self.invert_and_plot)
         left_layout.addWidget(self.invert_and_plot_btn, 1, 4)
@@ -477,10 +473,28 @@ class MainWindow(QMainWindow):
         # connect currentTextChanged signal to show_bin_limits function
         self.bin_selection.currentTextChanged.connect(lambda text: self.show_bin_limits(text))
 
-        # set column 5 to stretch, automatically creates space
-        left_layout.setColumnStretch(5, 1)
-
         controls_layout.addLayout(left_layout)
+
+        middle_layout = QGridLayout()
+
+        # 10 Hz options
+        self.load_10hz_files_btn = QPushButton("Load 10 Hz files")
+        self.load_10hz_files_btn.setFixedWidth(150)
+        self.load_10hz_files_btn.clicked.connect(self.load_10hz_files)
+        middle_layout.addWidget(self.load_10hz_files_btn,0,0)
+        self.cpc_idn_edit = QLineEdit()
+        self.cpc_idn_edit.setPlaceholderText("CPC IDN")
+        middle_layout.addWidget(self.cpc_idn_edit,1,0)
+        self.dilution_parameters_edit = QLineEdit()
+        self.dilution_parameters_edit.setPlaceholderText("amp,cen,sig,slope,intercept")
+        middle_layout.addWidget(self.dilution_parameters_edit,2,0)
+        self.convert_10hz_btn = QPushButton("Convert to 10 Hz")
+        self.convert_10hz_btn.setFixedWidth(150)
+        self.convert_10hz_btn.clicked.connect(self.convert_10hz)
+        middle_layout.addWidget(self.convert_10hz_btn,3,0)
+        middle_layout.setRowStretch(4, 1) # add stretch to row 4 to push widgets to top
+
+        controls_layout.addLayout(middle_layout)
         
         # main_layout/controls_layout/right_layout
         right_layout = QGridLayout()
@@ -496,7 +510,6 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(right_left_widget,1,0)
 
         self.save_button = QPushButton("Save data")
-        self.save_button.setObjectName("button")
         self.save_button.clicked.connect(self.save_inversion_data)
         right_left_layout.addWidget(self.save_button)
 
@@ -530,7 +543,6 @@ class MainWindow(QMainWindow):
         self.nais_data_label.setAlignment(Qt.AlignRight)
         right_right_layout.addWidget(self.nais_data_label)
         self.nais_data_btn = QPushButton("Load NAIS data")
-        self.nais_data_btn.setObjectName("button")
         self.nais_data_btn.clicked.connect(self.load_nais_data)
         right_right_layout.addWidget(self.nais_data_btn)
 
@@ -558,6 +570,7 @@ class MainWindow(QMainWindow):
 
         self.data_df = None
         self.calibration_df = None
+        self.cpc_df = None
         self.nais_data = None
         self.current_filenames = None
         self.Ninv = None
@@ -870,6 +883,8 @@ class MainWindow(QMainWindow):
             self.application.setOverrideCursor(Qt.WaitCursor)
             try:
                 self.error_output.clear() # clear error output text box
+                self.cpc_idn_edit.clear() # clear CPC IDN input
+                self.dilution_parameters_edit.clear() # clear dilution parameters input
                 self.current_filenames = file_names # store file names to variable
 
                 # set data file label information
@@ -960,6 +975,110 @@ class MainWindow(QMainWindow):
             except:
                 self.error_output.append("Error: Calibration file could not be read.")
 
+    def load_10hz_files(self):
+        # check if data files have been loaded
+        if self.current_filenames is None:
+            self.error_output.append("Load data files before loading 10 Hz files.")
+            return
+        if self.cpc_idn_edit.text() == "":
+            print("looking for CPC IDN...")
+            # TODO get all unique non-nan CPC IDN values, try finding files with each until found
+            for file_name in self.current_filenames:
+                par_filename = file_name[:-4] + ".par"
+                print("checking for file:", par_filename)
+                try:
+                    par_df = pd.read_csv(par_filename, delimiter=',', header=0)
+                    if 'CPC IDN' in par_df.columns:
+                        # find first CPC IDN value that is not nan
+                        cpc_idn = par_df['CPC IDN'].dropna().iloc[0]
+                        print("found CPC IDN:", cpc_idn)
+                        self.cpc_idn_edit.setText(str(cpc_idn))
+                        break
+                except:
+                    print("could not read file:", par_filename)
+            if self.cpc_idn_edit.text() == "":
+                print("CPC IDN not found.")
+                self.error_output.append("CPC IDN not found, enter manually.")
+        if self.dilution_parameters_edit.text() == "":
+            print("looking for dilution parameters...")
+            for file_name in self.current_filenames:
+                par_filename = file_name[:-4] + ".par"
+                print("checking for file:", par_filename)
+                try:
+                    par_df = pd.read_csv(par_filename, delimiter=',', header=0)
+                    if all(param in par_df.columns for param in ['amp', 'cen', 'sig', 'slope', 'intercept']):
+                        amp = par_df['amp'].dropna().iloc[0]
+                        cen = par_df['cen'].dropna().iloc[0]
+                        sig = par_df['sig'].dropna().iloc[0]
+                        slope = par_df['slope'].dropna().iloc[0]
+                        intercept = par_df['intercept'].dropna().iloc[0]
+                        dilution_params = f"{amp},{cen},{sig},{slope},{intercept}"
+                        print("found dilution parameters:", dilution_params)
+                        self.dilution_parameters_edit.setText(dilution_params)
+                        break
+                except:
+                    print("could not read file:", par_filename)
+            if self.dilution_parameters_edit.text() == "":
+                print("Dilution parameters not found.")
+                self.error_output.append("Dilution parameters not found, enter manually.")
+
+        cpc_idn = self.cpc_idn_edit.text()
+
+        if cpc_idn == "":
+            print("No CPC IDN, cannot look for 10 Hz files.")
+            return
+
+        print("looking for 10 Hz files...")
+        folder_path = os.path.dirname(self.current_filenames[0])
+        folder_path = folder_path.replace('\\', '/') + '/'
+        print("folder path:", folder_path)
+        cpc_file_tag = cpc_idn + '_CPC_10hz'
+        cpc_files = [] # list to store found cpc files
+        for file_name in self.current_filenames:
+            print("looking for 10 Hz file for data file:", file_name)
+            try:
+                file_name = file_name.replace('\\', '/')
+                file_timestamp = file_name.split('/')[-1][:15] # first 15 characters (YYYYMMDD_HHMMSS)
+                try:
+                    cpc_file = glob.glob(folder_path + '*' + file_timestamp + '*' + cpc_file_tag + '*.csv')[0]
+                except:
+                    file_timestamp_date = file_timestamp[:8]
+                    cpc_file = glob.glob(folder_path + '*' + file_timestamp_date + '*' + cpc_file_tag + '*.csv')[0]
+                cpc_file = cpc_file.replace('\\', '/')
+                cpc_files.append(cpc_file)
+                print("matching CPC file:", cpc_file)
+            except:
+                print("File matching failed for data file:", file_name)
+
+        if len(cpc_files) == 0:
+            print("No matching 10 Hz CPC files found.")
+            self.error_output.append("No matching 10 Hz CPC files found.")
+            return # TODO let user choose folder to look for 10 Hz files
+        else:
+            print(f"Found {len(cpc_files)} matching CPC 10 Hz files.")
+            self.error_output.append(f"Found {len(cpc_files)} matching CPC 10 Hz files.")
+
+        self.cpc_df = pd.DataFrame() # reset cpc dataframe
+        # read cpc files into single dataframe
+        for cpc_file in cpc_files:
+            try:
+                current_cpc_df = pd.read_csv(cpc_file, delimiter=',', header=0)
+                # convert time column to datetime
+                current_cpc_df['t'] = pd.to_datetime(current_cpc_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
+                self.cpc_df = pd.concat([self.cpc_df, current_cpc_df], ignore_index=True)
+            except Exception as e:
+                print("Error reading CPC file:", cpc_file)
+                self.error_output.append(f"Error reading CPC file {cpc_file.split('/')[-1]}:\n{str(e)}")
+        print("10 Hz CPC dataframe:")
+        print(self.cpc_df)
+
+    def convert_10hz(self):
+        # TODO expand both dataframes and mergge on time column
+        
+        # # merge example:
+        # merged_df = pd.merge(self.cpc_df, self.data_df, on='t')
+        return
+    
     def update_size_dist_plot_title(self):
         """
         Update the title of the size_dist_plot to show the scan start time.
