@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.9"
+version_number = "0.9.0"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -725,9 +725,6 @@ class MainWindow(QMainWindow):
                 Inverts the data and plots data on all three graphs,
                 """
                 if self.data_df is not None and self.calibration_df is not None:
-
-                    # clean nan satflow values from data
-                    self.data_df.dropna(subset=['satflow'], inplace=True)
                     
                     # if keyword argument 'bin_limits' was given, use it
                     if 'bin_limits' in kwargs:
@@ -896,6 +893,7 @@ class MainWindow(QMainWindow):
                     self.data_file_label.setToolTip("\n".join(file_names))
                 
                 self.data_df = pd.DataFrame() # reset data_df
+                self.cpc_df = None # reset cpc_df
                 self.model = None # reset device model variable
                 self.Ninv = None # reset inversion dataframe
                 self.Ninv_avg = None # reset inversion average dataframe
@@ -917,6 +915,9 @@ class MainWindow(QMainWindow):
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
                 self.update_bin_selection() # update bin selection options according to model and min/max Dp
+
+                # clean nan satflow and concentration values from data
+                self.data_df.dropna(subset=['satflow', 'concentration'], inplace=True)
 
                 # restore cursor to normal
                 self.application.restoreOverrideCursor()
@@ -976,6 +977,7 @@ class MainWindow(QMainWindow):
                 self.error_output.append("Error: Calibration file could not be read.")
 
     def load_10hz_files(self):
+        self.load_10hz_files_btn.clearFocus()
         # check if data files have been loaded
         if self.current_filenames is None:
             self.error_output.append("Load data files before loading 10 Hz files.")
@@ -1069,15 +1071,70 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print("Error reading CPC file:", cpc_file)
                 self.error_output.append(f"Error reading CPC file {cpc_file.split('/')[-1]}:\n{str(e)}")
-        print("10 Hz CPC dataframe:")
-        print(self.cpc_df)
 
     def convert_10hz(self):
-        # TODO expand both dataframes and mergge on time column
+
+        self.convert_10hz_btn.clearFocus()
+
+        # check if data and cpc data have been loaded
+        if self.data_df is None or self.cpc_df is None:
+            self.error_output.append("Load both PSM data and CPC 10 Hz data before converting to 10 Hz.")
+            return
+
+        # check if PSM data has valid scan status values
+        if 'Scan status' not in self.data_df.columns or 9 in self.data_df['Scan status'].values:
+            self.error_output.append("PSM data does not have valid scan status values for 10 Hz conversion.")
+            return
         
-        # # merge example:
-        # merged_df = pd.merge(self.cpc_df, self.data_df, on='t')
-        return
+        # set cursor to loading
+        self.application.setOverrideCursor(Qt.WaitCursor)
+
+        try:
+            # get dilution parameters from input
+            dilution_parameters = self.dilution_parameters_edit.text().split(',')
+            alpha, mu, sigma, slope, intercept = [float(param) for param in dilution_parameters]
+
+            # remove duplicate timestamps
+            # # TODO fix duplicate timestamps instead of dropping them
+            self.data_df = self.data_df.drop_duplicates(subset=['t'], keep='last')
+            self.cpc_df = self.cpc_df.drop_duplicates(subset=['t'], keep='last')
+            # reset index
+            self.data_df = self.data_df.reset_index(drop=True)
+            self.cpc_df = self.cpc_df.reset_index(drop=True)
+
+            # expand dataframes to 10 Hz
+            expanded_psm_df = expand_psm_data(self.data_df)
+            expanded_cpc_df = expand_cpc_data(self.cpc_df)
+
+            # prints for comparison / debugging
+            # print(self.data_df)
+            # print(expanded_psm_df)
+            # print(self.cpc_df)
+            # print(expanded_cpc_df)
+            
+            # merge expanded dataframes on timestamp
+            merged_df = pd.merge(expanded_psm_df, expanded_cpc_df, on='t')
+            # print(merged_df)
+
+            # correct concentration values
+            corrected_df = correct_concentration(merged_df, alpha, mu, sigma, slope, intercept, shift=0)
+            # print(corrected_df)
+
+            # replace self.data_df with corrected_df
+            self.data_df = corrected_df
+            print(self.data_df)
+
+            # plot raw data again
+            self.plot_raw()
+
+            # restore cursor to normal
+            self.application.restoreOverrideCursor()
+        
+        except Exception as e:
+            traceback.print_exc()
+            self.error_output.append("Error converting to 10 Hz:")
+            self.error_output.append(str(e))
+            self.application.restoreOverrideCursor() # restore cursor to normal
     
     def update_size_dist_plot_title(self):
         """

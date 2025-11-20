@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log
 
+### 0.9.0 - 2025.11.20
+- 10 Hz conversion (controls and functions)
+
 ### 0.8.9 - 2025.09.10
 - Set negative values to NaN
 
