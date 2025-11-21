@@ -1574,25 +1574,40 @@ class MainWindow(QMainWindow):
         self.calibration_df = self.calibration_df.sort_values(by=['cal_satflow'], ascending=False)
         self.calibration_df = self.calibration_df.reset_index(drop=True)
 
-        # find satlow up and down transitions and average satflow_diff over 20s
-        satflow_diff = np.convolve(np.diff(self.data_df['satflow']), np.ones((n_average,))/n_average, mode='valid')
+        # if valid Scan status values in data, use them to define up and down scans
+        if 'Scan status' in self.data_df.columns and 9 not in self.data_df['Scan status'].values:
+            print("Scan status column found.")
+            # set low and rising to upscan (1), high and falling to downscan (-1), other mode or nan to 0
+            self.data_df['up_scan'] = self.data_df['Scan status'].apply(lambda x: 1 if x in [0,1] else -1 if x in [2,3] else 0)
+            # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
+            self.data_df = self.data_df[self.data_df['up_scan'] != 0]
+            # add scan number from the point of changing scans
+            self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
 
-        # Force the times when average flow over 20 s is zero to upscan (or downscan)
-        satflow_diff[satflow_diff == 0] = -0.01
+            # print("unique up_scan values:", self.data_df['up_scan'].unique())
+            # print("unique scan_no values:", self.data_df['scan_no'].unique())
+            # print(self.data_df[['t','satflow','up_scan','scan_no']].dropna())
 
-        # +4 to account for the moving average start and stop
-        nan_filler = np.zeros(int((n_average+4)/2))
-        nan_filler[:] = np.nan
+        # otherwise, use averaged satflow direction to define up and down scans
+        else:
+            # find satlow up and down transitions and average satflow_diff over 20s
+            satflow_diff = np.convolve(np.diff(self.data_df['satflow']), np.ones((n_average,))/n_average, mode='valid')
+            # Force the times when average flow over 20 s is zero to upscan (or downscan)
+            satflow_diff[satflow_diff == 0] = -0.01
+            # +4 to account for the moving average start and stop
+            nan_filler = np.zeros(int((n_average+4)/2))
+            nan_filler[:] = np.nan
+            self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
+            # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
+            self.data_df = self.data_df[self.data_df['up_scan'] != 0]
+            # Add scan number from the point of changing scans
+            self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
+            # filter satflow 0 out of the data
+            self.data_df = self.data_df[self.data_df['satflow'] != 0]
 
-        self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
-        # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
-        self.data_df = self.data_df[self.data_df['up_scan'] != 0]
-
-        # Add scan number from the point of changing scans
-        self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
-
-        # filter satflow 0 out of the data
-        self.data_df = self.data_df[self.data_df['satflow'] != 0]
+            # print("unique up_scan values:", self.data_df['up_scan'].unique())
+            # print("unique scan_no values:", self.data_df['scan_no'].unique())
+            # print(self.data_df[['t','satflow','up_scan','scan_no']].dropna())
 
         return self.calibration_df, self.data_df
 
