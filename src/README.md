@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log
 
+### 0.9.2 - 2025.11.24
+- 10 Hz file lookup with multiple CPC IDN values
+
 ### 0.9.1 - 2025.11.24
 - 10 Hz 'Remove data with errors' support
 - Fixed file label sizes

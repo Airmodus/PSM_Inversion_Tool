@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.9.1"
+version_number = "0.9.2"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -989,23 +989,25 @@ class MainWindow(QMainWindow):
             return
         if self.cpc_idn_edit.text() == "":
             print("looking for CPC IDN...")
-            # TODO get all unique non-nan CPC IDN values, try finding files with each until found
+            cpc_idn_options = [] # list of found CPC IDN options
             for file_name in self.current_filenames:
                 par_filename = file_name[:-4] + ".par"
                 print("checking for file:", par_filename)
                 try:
                     par_df = pd.read_csv(par_filename, delimiter=',', header=0)
                     if 'CPC IDN' in par_df.columns:
-                        # find first CPC IDN value that is not nan
-                        cpc_idn = par_df['CPC IDN'].dropna().iloc[0]
-                        print("found CPC IDN:", cpc_idn)
-                        self.cpc_idn_edit.setText(str(cpc_idn))
-                        break
+                        # find all unique CPC IDN values in the column and add to options list
+                        unique_cpc_idns = par_df['CPC IDN'].dropna().unique()
+                        for cpc_idn in unique_cpc_idns:
+                            if cpc_idn not in cpc_idn_options:
+                                cpc_idn_options.append(str(cpc_idn))
                 except:
                     print("could not read file:", par_filename)
-            if self.cpc_idn_edit.text() == "":
+            if len(cpc_idn_options) == 0:
                 print("CPC IDN not found.")
                 self.error_output.append("CPC IDN not found, enter manually.")
+            else:
+                print("found CPC IDN values:", cpc_idn_options)
         if self.dilution_parameters_edit.text() == "":
             print("looking for dilution parameters...")
             for file_name in self.current_filenames:
@@ -1029,9 +1031,11 @@ class MainWindow(QMainWindow):
                 print("Dilution parameters not found.")
                 self.error_output.append("Dilution parameters not found, enter manually.")
 
-        cpc_idn = self.cpc_idn_edit.text()
-
-        if cpc_idn == "":
+        # if CPC IDN has been entered, use that value only
+        if self.cpc_idn_edit.text() != "":
+            cpc_idn_options = [self.cpc_idn_edit.text()]
+        # if no entered value and no options found, return
+        elif len(cpc_idn_options) == 0:
             print("No CPC IDN, cannot look for 10 Hz files.")
             return
 
@@ -1039,23 +1043,27 @@ class MainWindow(QMainWindow):
         folder_path = os.path.dirname(self.current_filenames[0])
         folder_path = folder_path.replace('\\', '/') + '/'
         print("folder path:", folder_path)
-        cpc_file_tag = cpc_idn + '_CPC_10hz'
-        cpc_files = [] # list to store found cpc files
-        for file_name in self.current_filenames:
-            print("looking for 10 Hz file for data file:", file_name)
-            try:
-                file_name = file_name.replace('\\', '/')
-                file_timestamp = file_name.split('/')[-1][:15] # first 15 characters (YYYYMMDD_HHMMSS)
+        for cpc_idn in cpc_idn_options:
+            print("using CPC IDN:", cpc_idn)
+            cpc_file_tag = cpc_idn + '_CPC_10hz'
+            cpc_files = [] # list to store found cpc files
+            for file_name in self.current_filenames:
                 try:
-                    cpc_file = glob.glob(folder_path + '*' + file_timestamp + '*' + cpc_file_tag + '*.csv')[0]
+                    file_name = file_name.replace('\\', '/')
+                    file_timestamp = file_name.split('/')[-1][:15] # first 15 characters (YYYYMMDD_HHMMSS)
+                    try:
+                        cpc_file = glob.glob(folder_path + '*' + file_timestamp + '*' + cpc_file_tag + '*.csv')[0]
+                    except:
+                        file_timestamp_date = file_timestamp[:8]
+                        cpc_file = glob.glob(folder_path + '*' + file_timestamp_date + '*' + cpc_file_tag + '*.csv')[0]
+                    cpc_file = cpc_file.replace('\\', '/')
+                    cpc_files.append(cpc_file)
+                    print("matching CPC 10 Hz file:", cpc_file)
                 except:
-                    file_timestamp_date = file_timestamp[:8]
-                    cpc_file = glob.glob(folder_path + '*' + file_timestamp_date + '*' + cpc_file_tag + '*.csv')[0]
-                cpc_file = cpc_file.replace('\\', '/')
-                cpc_files.append(cpc_file)
-                print("matching CPC file:", cpc_file)
-            except:
-                print("File matching failed for data file:", file_name)
+                    print("file matching failed for data file:", file_name)
+            if len(cpc_files) > 0:
+                self.cpc_idn_edit.setText(cpc_idn)
+                break # exit loop if matching files were found
 
         if len(cpc_files) == 0:
             print("No matching 10 Hz CPC files found.")
