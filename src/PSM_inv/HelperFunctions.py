@@ -56,10 +56,12 @@ def expand_psm_data(df):
         max_flow = 1.9
     print("min_flow, max_flow:", min_flow, max_flow)
 
-    # create 10 Hz time index and forward fill scan status and dilution factor
+    # create 10 Hz time index and forward fill relevant values
     df = df.set_index('t').resample('100ms').asfreq().reset_index()
     df['Scan status'] = df['Scan status'].ffill()
     df['dilution'] = df['dilution'].ffill()
+    df['PSM_system_status_error'] = df['PSM_system_status_error'].ffill()
+    df['CPC_system_status_error'] = df['CPC_system_status_error'].ffill()
     
     # mark scan status changes and calculate time since last change
     df['status_change'] = df['Scan status'] != df['Scan status'].shift()

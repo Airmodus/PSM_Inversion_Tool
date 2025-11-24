@@ -1,5 +1,9 @@
 # PSM Inversion Tool - Software change log
 
+### 0.9.1 - 2025.11.24
+- 10 Hz 'Remove data with errors' support
+- Fixed file label sizes
+
 ### 0.9.0 - 2025.11.20
 - 10 Hz conversion (controls and functions)
 

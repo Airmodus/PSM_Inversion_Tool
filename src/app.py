@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.9.0"
+version_number = "0.9.1"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -386,7 +386,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.load_data_btn,0,0)
         self.data_file_label = QLabel("No files selected")
         self.data_file_label.setObjectName("bordered")
-        #self.data_file_label.setFixedWidth(250)
+        self.data_file_label.setFixedWidth(250)
         self.data_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.data_file_label,0,1,1,3)
         self.refresh_file_btn = QPushButton("Refresh files")
@@ -400,7 +400,7 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.load_cal_btn,1,0)
         self.calibration_file_label = QLabel("No file selected")
         self.calibration_file_label.setObjectName("bordered")
-        #self.calibration_file_label.setFixedWidth(250)
+        self.calibration_file_label.setFixedWidth(250)
         self.calibration_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.calibration_file_label,1,1,1,3)
         self.invert_and_plot_btn = QPushButton("Invert and plot")
@@ -472,6 +472,8 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.bin_limits_edit,6,2,1,3)
         # connect currentTextChanged signal to show_bin_limits function
         self.bin_selection.currentTextChanged.connect(lambda text: self.show_bin_limits(text))
+
+        left_layout.setColumnStretch(5, 1) # add stretch to column 5 to push widgets to the left
 
         controls_layout.addLayout(left_layout)
 
@@ -571,6 +573,7 @@ class MainWindow(QMainWindow):
         self.data_df = None
         self.calibration_df = None
         self.cpc_df = None
+        self.data_df_backup = None
         self.nais_data = None
         self.current_filenames = None
         self.Ninv = None
@@ -893,6 +896,7 @@ class MainWindow(QMainWindow):
                     self.data_file_label.setToolTip("\n".join(file_names))
                 
                 self.data_df = pd.DataFrame() # reset data_df
+                self.data_df_backup = None # reset data_df_backup
                 self.cpc_df = None # reset cpc_df
                 self.model = None # reset device model variable
                 self.Ninv = None # reset inversion dataframe
@@ -910,14 +914,15 @@ class MainWindow(QMainWindow):
                         # print filename and error message to error output
                         self.error_output.append(f"Error reading file {file_name.split('/')[-1]}:\n{str(e)}")
                 
+                # clean nan satflow and concentration values from data
+                self.data_df.dropna(subset=['satflow', 'concentration'], inplace=True)
+                self.data_df.reset_index(drop=True, inplace=True)
+
                 self.find_data_gaps() # scan for data gaps
                 self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
                 self.update_bin_selection() # update bin selection options according to model and min/max Dp
-
-                # clean nan satflow and concentration values from data
-                self.data_df.dropna(subset=['satflow', 'concentration'], inplace=True)
 
                 # restore cursor to normal
                 self.application.restoreOverrideCursor()
@@ -1081,8 +1086,8 @@ class MainWindow(QMainWindow):
             self.error_output.append("Load both PSM data and CPC 10 Hz data before converting to 10 Hz.")
             return
 
-        # check if PSM data has valid scan status values
-        if 'Scan status' not in self.data_df.columns or 9 in self.data_df['Scan status'].values:
+        # check if PSM data has valid scan status values (1 or 3)
+        if 'Scan status' not in self.data_df.columns or not any(status in self.data_df['Scan status'].values for status in [1,3]):
             self.error_output.append("PSM data does not have valid scan status values for 10 Hz conversion.")
             return
         
@@ -1445,19 +1450,29 @@ class MainWindow(QMainWindow):
     # when button is clicked, reload data to apply changes
     def remove_errors_clicked(self):
         if self.data_df is not None:
-            self.refresh_files()
+            # reset inversion dataframes, remove or restore data with errors, and re-plot raw data
+            self.Ninv = None
+            self.Ninv_avg = None
+            self.remove_data_with_errors()
+            self.plot_raw()
 
     # Remove data with errors if button is checked
     def remove_data_with_errors(self):
-        # if Remove Data with Errors button is checked, replace data with NaN where errors are present
+        # if Remove Data with Errors button is checked, drop rows where errors are present
         if self.remove_error_data_btn.isChecked():
             if self.data_df is not None:
+                # make a copy of data_df as backup
+                self.data_df_backup = self.data_df.copy()
                 # remove rows with PSM errors
                 self.data_df = self.data_df[self.data_df['PSM_system_status_error'] == '0000000000000000']
                 # remove rows with CPC errors
                 self.data_df = self.data_df[self.data_df['CPC_system_status_error'] == '0000000000000000']
                 # reset dataframe index
                 self.data_df.reset_index(drop=True, inplace=True)
+        else: # if button is unchecked, restore data from backup
+            if self.data_df_backup is not None:
+                self.data_df = self.data_df_backup.copy()
+                self.data_df_backup = None
 
     def check_instrument_errors(self, df):
 
