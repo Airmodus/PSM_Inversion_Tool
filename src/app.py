@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.9.2"
+version_number = "0.9.3"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -1045,17 +1045,16 @@ class MainWindow(QMainWindow):
         print("folder path:", folder_path)
         for cpc_idn in cpc_idn_options:
             print("using CPC IDN:", cpc_idn)
-            cpc_file_tag = cpc_idn + '_CPC_10hz'
             cpc_files = [] # list to store found cpc files
             for file_name in self.current_filenames:
                 try:
                     file_name = file_name.replace('\\', '/')
                     file_timestamp = file_name.split('/')[-1][:15] # first 15 characters (YYYYMMDD_HHMMSS)
                     try:
-                        cpc_file = glob.glob(folder_path + '*' + file_timestamp + '*' + cpc_file_tag + '*.csv')[0]
+                        cpc_file = glob.glob(folder_path + '*' + file_timestamp + '*' + cpc_idn + '*_10hz*' + '*.csv')[0]
                     except:
                         file_timestamp_date = file_timestamp[:8]
-                        cpc_file = glob.glob(folder_path + '*' + file_timestamp_date + '*' + cpc_file_tag + '*.csv')[0]
+                        cpc_file = glob.glob(folder_path + '*' + file_timestamp_date + '*' + cpc_idn + '*_10hz*' + '*.csv')[0]
                     cpc_file = cpc_file.replace('\\', '/')
                     cpc_files.append(cpc_file)
                     print("matching CPC 10 Hz file:", cpc_file)
@@ -1745,27 +1744,27 @@ class MainWindow(QMainWindow):
                 print(f"Scan {i} at {scan_start_time_str} has faulty length: {scan_length} seconds")
                 faulty_scans.append(i)
         
-        # check scan start and end values
-        print("Validating scan start and end values...")
-        max_satflow_limit = self.max_satflow_limit
-        min_satflow_limit = self.min_satflow_limit
-        print(f"Max satflow limit: {max_satflow_limit}, Min satflow limit: {min_satflow_limit}")
-        # check min and max satflow values of each scan
-        for i in range(len(self.n_scans)):
-            scan_max_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].max()
-            scan_min_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].min()
-            # if max satflow doesn't go past max_satflow_limit, mark as faulty scan
-            if scan_max_satflow <= max_satflow_limit:
-                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
-                print(f"Scan {i} at {scan_start_time_str} has faulty max satflow: {scan_max_satflow}")
-                if i not in faulty_scans:
-                    faulty_scans.append(i)
-            # if scan min satflow doesn't go below min_satflow_limit, mark as faulty scan
-            if scan_min_satflow >= min_satflow_limit: # lowest satflow at highest bin edge
-                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
-                print(f"Scan {i} at {scan_start_time_str} has faulty min satflow: {scan_min_satflow}")
-                if i not in faulty_scans:
-                    faulty_scans.append(i)
+        # # check scan start and end values
+        # print("Validating scan start and end values...")
+        # max_satflow_limit = self.max_satflow_limit
+        # min_satflow_limit = self.min_satflow_limit
+        # print(f"Max satflow limit: {max_satflow_limit}, Min satflow limit: {min_satflow_limit}")
+        # # check min and max satflow values of each scan
+        # for i in range(len(self.n_scans)):
+        #     scan_max_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].max()
+        #     scan_min_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].min()
+        #     # if max satflow doesn't go past max_satflow_limit, mark as faulty scan
+        #     if scan_max_satflow <= max_satflow_limit:
+        #         scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+        #         print(f"Scan {i} at {scan_start_time_str} has faulty max satflow: {scan_max_satflow}")
+        #         if i not in faulty_scans:
+        #             faulty_scans.append(i)
+        #     # if scan min satflow doesn't go below min_satflow_limit, mark as faulty scan
+        #     if scan_min_satflow >= min_satflow_limit: # lowest satflow at highest bin edge
+        #         scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+        #         print(f"Scan {i} at {scan_start_time_str} has faulty min satflow: {scan_min_satflow}")
+        #         if i not in faulty_scans:
+        #             faulty_scans.append(i)
 
         # if no faulty scans found, return
         if len(faulty_scans) == 0:

@@ -1,5 +1,9 @@
 # PSM Inversion Tool - Software change log
 
+### 0.9.3 - 2025.11.27
+- 10 Hz CPC filename lookup fix (device nickname compatibility)
+- removed scan min/max flow check from quality filter (Raw data quality filtering)
+
 ### 0.9.2 - 2025.11.24
 - 10 Hz file lookup with multiple CPC IDN values
 
