@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.9.3"
+version_number = "0.9.4"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -1599,8 +1599,8 @@ class MainWindow(QMainWindow):
         # if valid Scan status values in data, use them to define up and down scans
         if 'Scan status' in self.data_df.columns and 9 not in self.data_df['Scan status'].values:
             print("Scan status column found.")
-            # set low and rising to upscan (1), high and falling to downscan (-1), other mode or nan to 0
-            self.data_df['up_scan'] = self.data_df['Scan status'].apply(lambda x: 1 if x in [0,1] else -1 if x in [2,3] else 0)
+            # set rising and high to upscan (1), falling and low to downscan (-1), other mode or nan to 0
+            self.data_df['up_scan'] = self.data_df['Scan status'].apply(lambda x: 1 if x in [1,2] else -1 if x in [3,0] else 0)
             # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
             self.data_df = self.data_df[self.data_df['up_scan'] != 0]
             # add scan number from the point of changing scans

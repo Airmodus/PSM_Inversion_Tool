@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log
 
+### 0.9.4 - 2025.12.05
+- changed scan status detection: rising 1 & 2 (was 0 & 1), falling 3 & 0 (was 2 & 3)
+
 ### 0.9.3 - 2025.11.27
 - 10 Hz CPC filename lookup fix (device nickname compatibility)
 - removed scan min/max flow check from quality filter (Raw data quality filtering)
