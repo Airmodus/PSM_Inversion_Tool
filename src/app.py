@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.8.3"
+version_number = "0.9.4"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -266,7 +266,7 @@ class MainWindow(QMainWindow):
         # Create the logo
         top_layout.addStretch()
         self.logo = QLabel()
-        pixmap = QPixmap(resource_path + '/images/Airmodus_white.png')
+        pixmap = QPixmap(resource_path + '/images/airmodus-envea-logo.png')
         self.logo.setPixmap(pixmap)
         top_layout.addWidget(self.logo)
         main_layout.addLayout(top_layout)
@@ -281,88 +281,65 @@ class MainWindow(QMainWindow):
         self.raw_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
         self.raw_plot_marker.sigDragged.connect(self.sync_markers)
 
-        # - main_layout/graph_layout
-        # Plots (three plots: raw, mid, time dist)
+        # Plots (three plots: raw, mid, size dist)
 
-        self.raw_gl = pg.GraphicsLayoutWidget(show=True)
+        # raw plot
+
+        self.raw_gl = pg.GraphicsLayoutWidget()
         self.raw_gl.setBackground('w')
-        self.raw_gl.setWindowTitle('Raw')
 
-        #self.raw_plot = self.raw_gl.addPlot(title="Raw",axisItems={'left': ScientificAxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
-        self.raw_plot = self.raw_gl.addPlot(title="Raw",axisItems={'left': pg.AxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
+        self.raw_plot = self.raw_gl.addPlot(axisItems={'left': pg.AxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
         self.raw_plot.setLabel('left', "Concentration [#/cm3]")
         self.raw_plot.setLabel('bottom', "Time")
         self.raw_plot.showGrid(x=True, y=True)
-        #self.raw_plot.getAxis('left').setStyle(tickTextOffset=-15)
-        #self.raw_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
-        # The following seems to behave weirdly
-        #self.raw_plot.setLogMode(x=False,y=True)
+        self.raw_plot.setTitle(f"Raw data", size="9pt")
+
         self.color_bar_plot = pg.PlotItem()
         self.color_bar_plot.hideAxis('bottom')
         self.color_bar_plot.hideAxis('left')
-        self.color_bar_plot.setLabel('right', "Sat. flow [lpm]")
 
         self.raw_gl.addItem(self.color_bar_plot)
-
         self.raw_gl.ci.layout.setColumnFixedWidth(1, 60)
 
         self.graph_layout.addWidget(self.raw_gl, stretch=1)
 
+        # mid plot
 
-        # main_layout/graph_layout/mid_layout
-        self.mid_layout = QGridLayout()
+        self.mid_gl = pg.GraphicsLayoutWidget()
+        self.mid_gl.setBackground('w')
 
         self.mid_plot_marker = pg.InfiniteLine(angle=90,movable=True,pen=pg.mkPen(color=(255, 0, 0, 255),width=2))
         self.mid_plot_marker.sigDragged.connect(self.sync_markers)
-        self.mid_plot_marker.sigPositionChanged.connect(self.update_plot)
-        self.mid_plot_marker.sigPositionChanged.connect(self.update_plot_title)
+        self.mid_plot_marker.sigPositionChanged.connect(self.update_size_dist_plot)
 
-        self.mid_plot = pg.PlotWidget(background='w',title="Contour")
-        # Get the title label and set its font properties
- 
-
-        # create a plot widget with white background and title "Contour" and increased font size
-
-        # putting the ticks inside the plot
-        #self.mid_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
-        #self.mid_plot.getAxis('left').setStyle(tickTextOffset=-15)
-
+        self.mid_plot = self.mid_gl.addPlot()
         self.mid_plot.setLabel('left', "Diameter [nm]")
         self.mid_plot.setLabel('bottom', "Time")
         self.mid_plot.showGrid(x=True, y=True)
-        # setting log scale for y
         #self.mid_plot.setLogMode(y=True)
-        self.mid_layout.addWidget(self.mid_plot,0,0)
+        self.mid_plot.setTitle(f"Inverted size distribution", size="9pt")
         
-        # making the colorbar scene and colorbar for the mid plot
-        self.mid_colorbar_gl= pg.GraphicsLayoutWidget(show=True)
-        self.mid_colorbar_gl.setBackground('w')
         self.mid_color_bar_plot = pg.PlotItem()
         self.mid_color_bar_plot.hideAxis('bottom')
         self.mid_color_bar_plot.hideAxis('left')
-        self.mid_colorbar_gl.addItem(self.mid_color_bar_plot)
-        self.mid_colorbar_gl.ci.layout.setColumnFixedWidth(0, 62)
-        
-        self.mid_layout.addWidget(self.mid_colorbar_gl,0,1)
+        self.mid_gl.addItem(self.mid_color_bar_plot)
+        self.mid_gl.ci.layout.setColumnFixedWidth(1, 60)
 
-        self.mid_layout.setColumnStretch(0, 8)  # column 0 (where the plot is) should take up 8 parts
-        self.mid_layout.setColumnStretch(1, 2)  # column 1 (where the color bar is) should take up 2 parts
+        self.graph_layout.addWidget(self.mid_gl, stretch=1)
 
-        self.mid_layout.setHorizontalSpacing(0)
-        self.graph_layout.addLayout(self.mid_layout, stretch=1)
+        # size dist plot
 
-        #self.size_dist_plot = pg.PlotWidget(background='w',title="Size Distribution",axisItems={'left': LogAxisItem(orientation='left'),'bottom': LogAxisItem(orientation='bottom')})
-        self.size_dist_plot = pg.PlotWidget(background='w',title="Size Distribution",axisItems={'left': LogAxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
+        self.size_dist_gl = pg.GraphicsLayoutWidget()
+        self.size_dist_gl.setBackground('w')
+        self.size_dist_plot = self.size_dist_gl.addPlot(axisItems={'left': LogAxisItem(orientation='left'),'bottom': pg.AxisItem(orientation='bottom')})
         self.size_dist_plot.setLabel('left', "dN/dlogDp [cm-3]")
         self.size_dist_plot.setLabel('bottom', "Diameter [nm]")
-        #self.size_dist_plot.getAxis('bottom').setStyle(tickTextOffset=-20)
-        #self.size_dist_plot.getAxis('left').setStyle(tickTextOffset=-20)
         self.size_dist_plot.showGrid(x=True, y=True)
         # change the y and x-axis to log scale
-        self.size_dist_plot.setLogMode(y=True)
-        #self.size_dist_plot.setLogMode(x=True)
+        self.size_dist_plot.setLogMode(x=True, y=True)
+        self.size_dist_plot.getAxis('left').enableAutoSIPrefix(enable=False)
 
-        self.graph_layout.addWidget(self.size_dist_plot, stretch=1)
+        self.graph_layout.addWidget(self.size_dist_gl, stretch=1)
 
         # Add the graph layout to the main layout.
         main_layout.addLayout(self.graph_layout)
@@ -381,6 +358,7 @@ class MainWindow(QMainWindow):
         self.avg_vs_raw_combobox.setMaximumWidth(100)
         self.avg_vs_raw_combobox.addItems(["Raw","Average"])
         self.avg_vs_raw_combobox.setCurrentIndex(0)
+        self.avg_vs_raw_combobox.currentIndexChanged.connect(self.update_mid_plot)
         mid_plot_settings.addWidget(self.avg_vs_raw_combobox)
         # create toggle button for day markers and add to mid_plot_settings layout
         self.day_markers_btn = QCheckBox("Day markers")
@@ -396,14 +374,13 @@ class MainWindow(QMainWindow):
         # add plot settings layout to main layout
         main_layout.addLayout(plot_settings_layout)
 
-        # - main_layout/controls_layout
+        # controls
+
         controls_layout = QHBoxLayout()
 
         left_layout = QGridLayout()
 
-
         self.load_data_btn = QPushButton("Load data files")
-        self.load_data_btn.setObjectName("button")
         self.load_data_btn.setFixedWidth(150)
         self.load_data_btn.clicked.connect(self.load_data)
         left_layout.addWidget(self.load_data_btn,0,0)
@@ -413,13 +390,11 @@ class MainWindow(QMainWindow):
         self.data_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.data_file_label,0,1,1,3)
         self.refresh_file_btn = QPushButton("Refresh files")
-        self.refresh_file_btn.setObjectName("button")
         self.refresh_file_btn.setFixedWidth(150)
         self.refresh_file_btn.clicked.connect(self.refresh_files)
         left_layout.addWidget(self.refresh_file_btn,0,4)
 
         self.load_cal_btn = QPushButton("Load calibration file")
-        self.load_cal_btn.setObjectName("button")
         self.load_cal_btn.setFixedWidth(150)
         self.load_cal_btn.clicked.connect(self.load_calibration)
         left_layout.addWidget(self.load_cal_btn,1,0)
@@ -429,7 +404,6 @@ class MainWindow(QMainWindow):
         self.calibration_file_label.setAlignment(Qt.AlignRight)
         left_layout.addWidget(self.calibration_file_label,1,1,1,3)
         self.invert_and_plot_btn = QPushButton("Invert and plot")
-        self.invert_and_plot_btn.setObjectName("button")
         self.invert_and_plot_btn.setFixedWidth(150)
         self.invert_and_plot_btn.clicked.connect(self.invert_and_plot)
         left_layout.addWidget(self.invert_and_plot_btn, 1, 4)
@@ -499,10 +473,30 @@ class MainWindow(QMainWindow):
         # connect currentTextChanged signal to show_bin_limits function
         self.bin_selection.currentTextChanged.connect(lambda text: self.show_bin_limits(text))
 
-        # set column 5 to stretch, automatically creates space
-        left_layout.setColumnStretch(5, 1)
+        left_layout.setColumnStretch(5, 1) # add stretch to column 5 to push widgets to the left
 
         controls_layout.addLayout(left_layout)
+
+        middle_layout = QGridLayout()
+
+        # 10 Hz options
+        self.load_10hz_files_btn = QPushButton("Load 10 Hz files")
+        self.load_10hz_files_btn.setFixedWidth(150)
+        self.load_10hz_files_btn.clicked.connect(self.load_10hz_files)
+        middle_layout.addWidget(self.load_10hz_files_btn,0,0)
+        self.cpc_idn_edit = QLineEdit()
+        self.cpc_idn_edit.setPlaceholderText("CPC IDN")
+        middle_layout.addWidget(self.cpc_idn_edit,1,0)
+        self.dilution_parameters_edit = QLineEdit()
+        self.dilution_parameters_edit.setPlaceholderText("amp,cen,sig,slope,intercept")
+        middle_layout.addWidget(self.dilution_parameters_edit,2,0)
+        self.convert_10hz_btn = QPushButton("Convert to 10 Hz")
+        self.convert_10hz_btn.setFixedWidth(150)
+        self.convert_10hz_btn.clicked.connect(self.convert_10hz)
+        middle_layout.addWidget(self.convert_10hz_btn,3,0)
+        middle_layout.setRowStretch(4, 1) # add stretch to row 4 to push widgets to top
+
+        controls_layout.addLayout(middle_layout)
         
         # main_layout/controls_layout/right_layout
         right_layout = QGridLayout()
@@ -518,7 +512,6 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(right_left_widget,1,0)
 
         self.save_button = QPushButton("Save data")
-        self.save_button.setObjectName("button")
         self.save_button.clicked.connect(self.save_inversion_data)
         right_left_layout.addWidget(self.save_button)
 
@@ -552,7 +545,6 @@ class MainWindow(QMainWindow):
         self.nais_data_label.setAlignment(Qt.AlignRight)
         right_right_layout.addWidget(self.nais_data_label)
         self.nais_data_btn = QPushButton("Load NAIS data")
-        self.nais_data_btn.setObjectName("button")
         self.nais_data_btn.clicked.connect(self.load_nais_data)
         right_right_layout.addWidget(self.nais_data_btn)
 
@@ -580,6 +572,8 @@ class MainWindow(QMainWindow):
 
         self.data_df = None
         self.calibration_df = None
+        self.cpc_df = None
+        self.data_df_backup = None
         self.nais_data = None
         self.current_filenames = None
         self.Ninv = None
@@ -672,8 +666,8 @@ class MainWindow(QMainWindow):
                 formatted_date = f'{day}/{month}/{year} - {end_day}/{end_month}/{end_year}'
             else:
                 formatted_date = f'{day}/{month}/{year}'
-            # setting the raw plot title
-            self.raw_plot.setTitle(f"Raw Data {formatted_date}", size="9pt")
+            # setting the plot titles
+            self.raw_plot.setTitle(f"Raw data {formatted_date}", size="9pt")
             self.mid_plot.setTitle(f"Inverted size distribution {formatted_date}", size="9pt")
 
             # Create color bar plot
@@ -734,9 +728,6 @@ class MainWindow(QMainWindow):
                 Inverts the data and plots data on all three graphs,
                 """
                 if self.data_df is not None and self.calibration_df is not None:
-
-                    # clean nan satflow values from data
-                    self.data_df.dropna(subset=['satflow'], inplace=True)
                     
                     # if keyword argument 'bin_limits' was given, use it
                     if 'bin_limits' in kwargs:
@@ -772,174 +763,8 @@ class MainWindow(QMainWindow):
                     # Convert Timestamp objects to POSIX timestamps
                     self.posix_timestamps = self.data_df['t'].apply(lambda x: x.timestamp())
 
-
-                    # Contour Plot -----------------------------------------------------
-                    self.mid_plot.clear()
-
-                    # Creates the middle contour plot  
-                    x = self.scan_start_time
-                    #x = (x - np.datetime64('1970-01-01T00:00:00'))
-                    # adding bottom axis to the plot
-                    self.mid_plot.getPlotItem().setAxisItems({'bottom': TimeAxisItemForContour(x,orientation='bottom')})
-                    self.mid_plot.setLabel('bottom','Time')
-                    self.mid_plot.setLabel('left', "Diameter [nm]")
-                    # Set the y range to the min and max of the diameter from the bin lims
-                    self.mid_plot.setYRange(np.min(self.Dplot),np.max(self.Dplot))
-
-                    # create ticks for left axis
-                    bin_ticks = []
-                    for i in range(len(self.Dplot)):
-                        # add tick as tuple (value, string)
-                        bin_ticks.append((len(self.Dplot) - (i + 1), str(round(self.Dplot[i], 2))))
-                    print("bin_ticks", bin_ticks)
-                    # set left axis ticks
-                    # https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/axisitem.html#pyqtgraph.AxisItem.setTicks
-                    self.mid_plot.getAxis('left').setTicks([bin_ticks])
-
-                    #self.mid_plot.getAxis('bottom').setStyle(tickTextOffset=-15)
-                    # this is needed to show the ticks inside the plot,
-                    # it just removes vertical grid from the plot...
-                    self.mid_plot.getPlotItem().getAxis('bottom').setGrid(0)
-
-                    # add raw plot marker if not yet added
-                    if not self.markers_added:
-                        # add raw plot marker on top of data
-                        self.raw_plot.addItem(self.raw_plot_marker)
-                        self.raw_plot_marker.setBounds((self.posix_timestamps.iloc[0], self.posix_timestamps.iloc[-1]))
-                        self.markers_added = True
-
-                    # Convert numpy.datetime64 array to a POSIX timestamp array
-                    skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
-                    y = self.Dplot
-                    print("y", y)     
-                    if self.avg_vs_raw_combobox.currentText() == 'Raw':
-                        z = np.log10(self.Ninv.iloc[:, skip:].values)
-                    else: # Averaged
-                        z = np.log10(self.Ninv_avg.iloc[:, skip:].values)
-                    # flip the y axis
-                    z = np.flip(z)
-                    # flip the x axis
-                    for i in range(len(z)):
-                        z[i] = np.flip(z[i])
-
-                    # # temporarily replace nan and inf values with zero for min/max calculation
-                    # z_no_nan = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
-                    # min_z = np.min(z_no_nan)
-                    # max_z = np.max(z_no_nan)
-
-                    # replace nan and inf values with zero
-                    z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
-                    # set floor value: change all values below 0.1 to 0.1
-                    z[z < 0.1] = 0.1
-                    min_z = np.min(z)
-                    max_z = np.max(z)
-                    
-                    # round the max value to the next power of ten
-                    max_z = np.ceil(max_z)
-                    min_z = np.floor(min_z)
-
-                    # Scale back to correct concentration
-                    z_normalized = (z-min_z)/(max_z - min_z)
-
-                    # Create the color map
-                    cmap = pg.colormap.get('CET-R4')
-
-                    # # Set the position of the image
-                    # # TODO: All of this is a mess, but this is the place to adjust the scales.
-                    # # HOW ABOUT LOG STUFF? Is the bins even correc? Most likely not
-                    # tr = QTransform()  # prepare ImageItem transformation:
-                    # # Get the number of bins and assing it to nbin
-                    # nbin = len(self.Dplot)-1
-                    # max_size = np.nanmax(y)
-                    # min_size = np.nanmin(y)
-                    # print(min_size, max_size)  
-                    # len_range = max_size-min_size
-                    # pixel_size = len_range/nbin
-
-                    # tr.scale(1, len_range/nbin)       # scale horizontal and vertical axes
-                    # tr.translate(0, min_size/pixel_size) # move 3x3 image to locate center at axis origin
-
-                    self.image_item = pg.ImageItem(image=z_normalized.T)
-                    #self.image_item.setTransform(tr)
-                    self.mid_plot.addItem(self.image_item)
-                    #self.mid_plot.setYRange(np.min(y),np.max(y))
-                    # Set range for the colormap
-                    self.image_item.setLevels([0, 1])
-
-                    if cmap is not None:
-                        self.image_item.setLookupTable(cmap.getLookupTable(0.0, 1.0, 256))
-
-                    # Generate new x and y arrays with the correct scaling
-                    x = pd.date_range(start=x[0], end=x[-1], periods=z_normalized.shape[1])
-                    y = np.linspace(y[0], y[-1], z_normalized.shape[0])
-
-                    # Set the position of the image
-                    #self.image_item.setPos(0,np.min(y))
-
-                    # autoscale mid_plot
-                    self.mid_plot.enableAutoRange(axis='y', enable=True)
-
-                    # NEW
-                    #-------------------------------------------------------------------
-
-                    # Create color bar plot
-                    axis = pg.AxisItem('right')
-                    # Map a value x from one range to another
-                    def map_range(x, in_min, in_max, out_min, out_max):
-                        return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
-
-                    # Calculate the labels for the axis
-                    #ticks = [(map_range(i, 0, 4, 0, 100), f"{min_z+ (max_z - min_z) * (i / 4):.2f}") for i in range(5)]
-                    n_ticks = int(max_z-min_z)
-                    ticks = [(map_range(i, 0, n_ticks, 0, 100), f"{10**(min_z+ (max_z - min_z) * (i / n_ticks)):.0e}") for i in range(n_ticks+1)]
-
-                    # Set the labels for the axis
-                    axis.setTicks([ticks])
-
-                    self.mid_color_bar_plot.setAxisItems({'right':axis})
-                    # Set the range of the color bar plot to match the color bar
-                    self.mid_color_bar_plot.setRange(yRange=[0, 100])
-                    
-                    # Create color bar data
-                    color_bar_data = np.repeat(np.linspace(0, 1, 100).reshape(-1, 1), 10, axis=1).T
-
-                    # change the label offset
-                    #self.mid_color_bar_plot.getAxis('right').setStyle(tickTextOffset=-15)
-
-                    # Create color bar image item
-                    if cmap is not None:
-                        color_bar = pg.ImageItem(color_bar_data, lut=cmap.getLookupTable())
-                        self.mid_color_bar_plot.addItem(color_bar)
-
-                    # Add label to the color bar plot
-                    # self.mid_color_bar_plot.setLabel('left', "dN/dlogDp [cm-3]")
-
-                    # Update the plots in order to show the changes in the dilution factor in the single scan plot
-                    self.update_plot()
-
-                    # add day markers to plot if data is from multiple days
-                    # find unique days in scan_start_time
-                    unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
-                    self.day_markers = [] # reset day markers list
-                    if len(unique_days) > 1:
-                        for day in unique_days:
-                            # get first index of day
-                            day_index = np.where(self.scan_start_time.astype('datetime64[D]') == day)[0][0]
-                            # create label for marker
-                            month, day = str(day).split('-')[1:]
-                            day_label = f"{day}/{month}"
-                            # create day marker
-                            day_marker = pg.InfiniteLine(pos=day_index, angle=90, movable=False, pen=pg.mkPen(color=(255, 255, 255, 255), width=1), label=day_label, labelOpts={'position': 0.85, 'anchors': [(0.5, 0.2), (0.5, 0.2)], 'color': (255, 255, 255, 255), 'rotateAxis': (1, 0)})
-                            self.mid_plot.addItem(day_marker) # add to plot
-                            self.day_markers.append(day_marker) # add to list
-                        # show / hide day markers based on user setting
-                        self.toggle_day_markers()
-                        
-                    # add mid plot marker on top of data
-                    self.mid_plot.addItem(self.mid_plot_marker)
-                    self.mid_plot_marker.setBounds((0, len(x)-1))
-                    self.mid_plot_marker.setPos(0)
-                    self.sync_markers(self.mid_plot_marker)
+                    # Update mid plot
+                    self.update_mid_plot()
 
                 else:
                     if self.data_df is None and self.calibration_df is None:
@@ -1058,6 +883,8 @@ class MainWindow(QMainWindow):
             self.application.setOverrideCursor(Qt.WaitCursor)
             try:
                 self.error_output.clear() # clear error output text box
+                self.cpc_idn_edit.clear() # clear CPC IDN input
+                self.dilution_parameters_edit.clear() # clear dilution parameters input
                 self.current_filenames = file_names # store file names to variable
 
                 # set data file label information
@@ -1069,6 +896,8 @@ class MainWindow(QMainWindow):
                     self.data_file_label.setToolTip("\n".join(file_names))
                 
                 self.data_df = pd.DataFrame() # reset data_df
+                self.data_df_backup = None # reset data_df_backup
+                self.cpc_df = None # reset cpc_df
                 self.model = None # reset device model variable
                 self.Ninv = None # reset inversion dataframe
                 self.Ninv_avg = None # reset inversion average dataframe
@@ -1083,8 +912,12 @@ class MainWindow(QMainWindow):
                         self.read_file()
                     except Exception as e:
                         # print filename and error message to error output
-                        self.error_output.append(f"Error reading file {file_name.split("/")[-1]}: {str(e)}")
+                        self.error_output.append(f"Error reading file {file_name.split('/')[-1]}:\n{str(e)}")
                 
+                # clean nan satflow and concentration values from data
+                self.data_df.dropna(subset=['satflow', 'concentration'], inplace=True)
+                self.data_df.reset_index(drop=True, inplace=True)
+
                 self.find_data_gaps() # scan for data gaps
                 self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
@@ -1148,7 +981,174 @@ class MainWindow(QMainWindow):
             except:
                 self.error_output.append("Error: Calibration file could not be read.")
 
-    def update_plot_title(self):
+    def load_10hz_files(self):
+        self.load_10hz_files_btn.clearFocus()
+        # check if data files have been loaded
+        if self.current_filenames is None:
+            self.error_output.append("Load data files before loading 10 Hz files.")
+            return
+        if self.cpc_idn_edit.text() == "":
+            print("looking for CPC IDN...")
+            cpc_idn_options = [] # list of found CPC IDN options
+            for file_name in self.current_filenames:
+                par_filename = file_name[:-4] + ".par"
+                print("checking for file:", par_filename)
+                try:
+                    par_df = pd.read_csv(par_filename, delimiter=',', header=0)
+                    if 'CPC IDN' in par_df.columns:
+                        # find all unique CPC IDN values in the column and add to options list
+                        unique_cpc_idns = par_df['CPC IDN'].dropna().unique()
+                        for cpc_idn in unique_cpc_idns:
+                            if cpc_idn not in cpc_idn_options:
+                                cpc_idn_options.append(str(cpc_idn))
+                except:
+                    print("could not read file:", par_filename)
+            if len(cpc_idn_options) == 0:
+                print("CPC IDN not found.")
+                self.error_output.append("CPC IDN not found, enter manually.")
+            else:
+                print("found CPC IDN values:", cpc_idn_options)
+        if self.dilution_parameters_edit.text() == "":
+            print("looking for dilution parameters...")
+            for file_name in self.current_filenames:
+                par_filename = file_name[:-4] + ".par"
+                print("checking for file:", par_filename)
+                try:
+                    par_df = pd.read_csv(par_filename, delimiter=',', header=0)
+                    if all(param in par_df.columns for param in ['amp', 'cen', 'sig', 'slope', 'intercept']):
+                        amp = par_df['amp'].dropna().iloc[0]
+                        cen = par_df['cen'].dropna().iloc[0]
+                        sig = par_df['sig'].dropna().iloc[0]
+                        slope = par_df['slope'].dropna().iloc[0]
+                        intercept = par_df['intercept'].dropna().iloc[0]
+                        dilution_params = f"{amp},{cen},{sig},{slope},{intercept}"
+                        print("found dilution parameters:", dilution_params)
+                        self.dilution_parameters_edit.setText(dilution_params)
+                        break
+                except:
+                    print("could not read file:", par_filename)
+            if self.dilution_parameters_edit.text() == "":
+                print("Dilution parameters not found.")
+                self.error_output.append("Dilution parameters not found, enter manually.")
+
+        # if CPC IDN has been entered, use that value only
+        if self.cpc_idn_edit.text() != "":
+            cpc_idn_options = [self.cpc_idn_edit.text()]
+        # if no entered value and no options found, return
+        elif len(cpc_idn_options) == 0:
+            print("No CPC IDN, cannot look for 10 Hz files.")
+            return
+
+        print("looking for 10 Hz files...")
+        folder_path = os.path.dirname(self.current_filenames[0])
+        folder_path = folder_path.replace('\\', '/') + '/'
+        print("folder path:", folder_path)
+        for cpc_idn in cpc_idn_options:
+            print("using CPC IDN:", cpc_idn)
+            cpc_files = [] # list to store found cpc files
+            for file_name in self.current_filenames:
+                try:
+                    file_name = file_name.replace('\\', '/')
+                    file_timestamp = file_name.split('/')[-1][:15] # first 15 characters (YYYYMMDD_HHMMSS)
+                    try:
+                        cpc_file = glob.glob(folder_path + '*' + file_timestamp + '*' + cpc_idn + '*_10hz*' + '*.csv')[0]
+                    except:
+                        file_timestamp_date = file_timestamp[:8]
+                        cpc_file = glob.glob(folder_path + '*' + file_timestamp_date + '*' + cpc_idn + '*_10hz*' + '*.csv')[0]
+                    cpc_file = cpc_file.replace('\\', '/')
+                    cpc_files.append(cpc_file)
+                    print("matching CPC 10 Hz file:", cpc_file)
+                except:
+                    print("file matching failed for data file:", file_name)
+            if len(cpc_files) > 0:
+                self.cpc_idn_edit.setText(cpc_idn)
+                break # exit loop if matching files were found
+
+        if len(cpc_files) == 0:
+            print("No matching 10 Hz CPC files found.")
+            self.error_output.append("No matching 10 Hz CPC files found.")
+            return # TODO let user choose folder to look for 10 Hz files
+        else:
+            print(f"Found {len(cpc_files)} matching CPC 10 Hz files.")
+            self.error_output.append(f"Found {len(cpc_files)} matching CPC 10 Hz files.")
+
+        self.cpc_df = pd.DataFrame() # reset cpc dataframe
+        # read cpc files into single dataframe
+        for cpc_file in cpc_files:
+            try:
+                current_cpc_df = pd.read_csv(cpc_file, delimiter=',', header=0)
+                # convert time column to datetime
+                current_cpc_df['t'] = pd.to_datetime(current_cpc_df.iloc[:, 0], format='%Y.%m.%d %H:%M:%S')
+                self.cpc_df = pd.concat([self.cpc_df, current_cpc_df], ignore_index=True)
+            except Exception as e:
+                print("Error reading CPC file:", cpc_file)
+                self.error_output.append(f"Error reading CPC file {cpc_file.split('/')[-1]}:\n{str(e)}")
+
+    def convert_10hz(self):
+
+        self.convert_10hz_btn.clearFocus()
+
+        # check if data and cpc data have been loaded
+        if self.data_df is None or self.cpc_df is None:
+            self.error_output.append("Load both PSM data and CPC 10 Hz data before converting to 10 Hz.")
+            return
+
+        # check if PSM data has valid scan status values (1 or 3)
+        if 'Scan status' not in self.data_df.columns or not any(status in self.data_df['Scan status'].values for status in [1,3]):
+            self.error_output.append("PSM data does not have valid scan status values for 10 Hz conversion.")
+            return
+        
+        # set cursor to loading
+        self.application.setOverrideCursor(Qt.WaitCursor)
+
+        try:
+            # get dilution parameters from input
+            dilution_parameters = self.dilution_parameters_edit.text().split(',')
+            alpha, mu, sigma, slope, intercept = [float(param) for param in dilution_parameters]
+
+            # remove duplicate timestamps
+            # # TODO fix duplicate timestamps instead of dropping them
+            self.data_df = self.data_df.drop_duplicates(subset=['t'], keep='last')
+            self.cpc_df = self.cpc_df.drop_duplicates(subset=['t'], keep='last')
+            # reset index
+            self.data_df = self.data_df.reset_index(drop=True)
+            self.cpc_df = self.cpc_df.reset_index(drop=True)
+
+            # expand dataframes to 10 Hz
+            expanded_psm_df = expand_psm_data(self.data_df)
+            expanded_cpc_df = expand_cpc_data(self.cpc_df)
+
+            # prints for comparison / debugging
+            # print(self.data_df)
+            # print(expanded_psm_df)
+            # print(self.cpc_df)
+            # print(expanded_cpc_df)
+            
+            # merge expanded dataframes on timestamp
+            merged_df = pd.merge(expanded_psm_df, expanded_cpc_df, on='t')
+            # print(merged_df)
+
+            # correct concentration values
+            corrected_df = correct_concentration(merged_df, alpha, mu, sigma, slope, intercept, shift=0)
+            # print(corrected_df)
+
+            # replace self.data_df with corrected_df
+            self.data_df = corrected_df
+            print(self.data_df)
+
+            # plot raw data again
+            self.plot_raw()
+
+            # restore cursor to normal
+            self.application.restoreOverrideCursor()
+        
+        except Exception as e:
+            traceback.print_exc()
+            self.error_output.append("Error converting to 10 Hz:")
+            self.error_output.append(str(e))
+            self.application.restoreOverrideCursor() # restore cursor to normal
+    
+    def update_size_dist_plot_title(self):
         """
         Update the title of the size_dist_plot to show the scan start time.
         Used when the marker is moved.
@@ -1172,7 +1172,7 @@ class MainWindow(QMainWindow):
         _year,_month,_day = _date.split('-')
         _hour,_minute,_second = _time.split(':')
         formatted_time = f"{_day}/{_month}/{_year} {_hour}:{_minute}:{_second}"
-        self.size_dist_plot.setTitle(f"Scan Start Time: {formatted_time}", size="9pt")
+        self.size_dist_plot.setTitle(f"Scan start time: {formatted_time}", size="9pt")
 
         # if nais data has been loaded, convert scan_start_time to datetime object and send to update_nais()
         if self.nais_data is not None:
@@ -1208,7 +1208,7 @@ class MainWindow(QMainWindow):
                 print("NAIS data loaded successfully")
                 print(self.nais_data)
                 try:
-                    self.update_plot_title()
+                    self.update_size_dist_plot_title()
                 except:
                     print("Error updating plot title")
             except:
@@ -1256,8 +1256,174 @@ class MainWindow(QMainWindow):
             message = "Unexpected error arose during scan averaging"
             self.error_output.append(message)
 
+    def update_mid_plot(self):
+
+        if self.Ninv is None:
+            return # if no inversion data, do nothing
+
+        self.mid_plot.clear()
+
+        # Creates the middle contour plot  
+        x = self.scan_start_time
+        #x = (x - np.datetime64('1970-01-01T00:00:00'))
+        # adding bottom axis to the plot
+        self.mid_plot.setAxisItems({'bottom': TimeAxisItemForContour(x,orientation='bottom')})
+        self.mid_plot.setLabel('bottom','Time')
+        self.mid_plot.setLabel('left', "Diameter [nm]")
+        # Set the y range to the min and max of the diameter from the bin lims
+        self.mid_plot.setYRange(np.min(self.Dplot),np.max(self.Dplot))
+
+        # create ticks for left axis
+        bin_ticks = []
+        for i in range(len(self.Dplot)):
+            # add tick as tuple (value, string)
+            bin_ticks.append((len(self.Dplot) - (i + 1), str(round(self.Dplot[i], 2))))
+        print("bin_ticks", bin_ticks)
+        # set left axis ticks
+        # https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/axisitem.html#pyqtgraph.AxisItem.setTicks
+        self.mid_plot.getAxis('left').setTicks([bin_ticks])
+
+        # add raw plot marker if not yet added
+        if not self.markers_added:
+            # add raw plot marker on top of data
+            self.raw_plot.addItem(self.raw_plot_marker)
+            self.raw_plot_marker.setBounds((self.posix_timestamps.iloc[0], self.posix_timestamps.iloc[-1]))
+            self.markers_added = True
+
+        # Convert numpy.datetime64 array to a POSIX timestamp array
+        skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
+        y = self.Dplot
+        print("y", y)     
+        if self.avg_vs_raw_combobox.currentText() == 'Raw':
+            z = np.log10(self.Ninv.iloc[:, skip:].values)
+        else: # Averaged
+            z = np.log10(self.Ninv_avg.iloc[:, skip:].values)
+        # flip the y axis
+        z = np.flip(z)
+        # flip the x axis
+        for i in range(len(z)):
+            z[i] = np.flip(z[i])
+
+        # # temporarily replace nan and inf values with zero for min/max calculation
+        # z_no_nan = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
+        # min_z = np.min(z_no_nan)
+        # max_z = np.max(z_no_nan)
+
+        # replace nan and inf values with zero
+        z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
+        # set floor value: change all values below 0.1 to 0.1
+        z[z < 0.1] = 0.1
+        min_z = np.min(z)
+        max_z = np.max(z)
+        
+        # round the max value to the next power of ten
+        max_z = np.ceil(max_z)
+        min_z = np.floor(min_z)
+
+        # Scale back to correct concentration
+        z_normalized = (z-min_z)/(max_z - min_z)
+
+        # Create the color map
+        cmap = pg.colormap.get('CET-R4')
+
+        # # Set the position of the image
+        # # TODO: All of this is a mess, but this is the place to adjust the scales.
+        # # HOW ABOUT LOG STUFF? Is the bins even correc? Most likely not
+        # tr = QTransform()  # prepare ImageItem transformation:
+        # # Get the number of bins and assing it to nbin
+        # nbin = len(self.Dplot)-1
+        # max_size = np.nanmax(y)
+        # min_size = np.nanmin(y)
+        # print(min_size, max_size)  
+        # len_range = max_size-min_size
+        # pixel_size = len_range/nbin
+
+        # tr.scale(1, len_range/nbin)       # scale horizontal and vertical axes
+        # tr.translate(0, min_size/pixel_size) # move 3x3 image to locate center at axis origin
+
+        self.image_item = pg.ImageItem(image=z_normalized.T)
+        #self.image_item.setTransform(tr)
+        self.mid_plot.addItem(self.image_item)
+        #self.mid_plot.setYRange(np.min(y),np.max(y))
+        # Set range for the colormap
+        self.image_item.setLevels([0, 1])
+
+        if cmap is not None:
+            self.image_item.setLookupTable(cmap.getLookupTable(0.0, 1.0, 256))
+
+        # Generate new x and y arrays with the correct scaling
+        x = pd.date_range(start=x[0], end=x[-1], periods=z_normalized.shape[1])
+        y = np.linspace(y[0], y[-1], z_normalized.shape[0])
+
+        # Set the position of the image
+        #self.image_item.setPos(0,np.min(y))
+
+        # autoscale mid_plot
+        self.mid_plot.enableAutoRange(axis='y', enable=True)
+
+        # NEW
+        #-------------------------------------------------------------------
+
+        # Create color bar plot
+        axis = pg.AxisItem('right')
+        # Map a value x from one range to another
+        def map_range(x, in_min, in_max, out_min, out_max):
+            return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+        # Calculate the labels for the axis
+        #ticks = [(map_range(i, 0, 4, 0, 100), f"{min_z+ (max_z - min_z) * (i / 4):.2f}") for i in range(5)]
+        n_ticks = int(max_z-min_z)
+        ticks = [(map_range(i, 0, n_ticks, 0, 100), f"{10**(min_z+ (max_z - min_z) * (i / n_ticks)):.0e}") for i in range(n_ticks+1)]
+
+        # Set the labels for the axis
+        axis.setTicks([ticks])
+
+        self.mid_color_bar_plot.setAxisItems({'right':axis})
+        # Set the range of the color bar plot to match the color bar
+        self.mid_color_bar_plot.setRange(yRange=[0, 100])
+        
+        # Create color bar data
+        color_bar_data = np.repeat(np.linspace(0, 1, 100).reshape(-1, 1), 10, axis=1).T
+
+        # change the label offset
+        #self.mid_color_bar_plot.getAxis('right').setStyle(tickTextOffset=-15)
+
+        # Create color bar image item
+        if cmap is not None:
+            color_bar = pg.ImageItem(color_bar_data, lut=cmap.getLookupTable())
+            self.mid_color_bar_plot.addItem(color_bar)
+
+        # Add label to the color bar plot
+        # self.mid_color_bar_plot.setLabel('left', "dN/dlogDp [cm-3]")
+
+        # Update the plots in order to show the changes in the dilution factor in the single scan plot
+        self.update_size_dist_plot()
+
+        # add day markers to plot if data is from multiple days
+        # find unique days in scan_start_time
+        unique_days = np.unique(self.scan_start_time.astype('datetime64[D]'))
+        self.day_markers = [] # reset day markers list
+        if len(unique_days) > 1:
+            for day in unique_days:
+                # get first index of day
+                day_index = np.where(self.scan_start_time.astype('datetime64[D]') == day)[0][0]
+                # create label for marker
+                month, day = str(day).split('-')[1:]
+                day_label = f"{day}/{month}"
+                # create day marker
+                day_marker = pg.InfiniteLine(pos=day_index, angle=90, movable=False, pen=pg.mkPen(color=(255, 255, 255, 255), width=1), label=day_label, labelOpts={'position': 0.85, 'anchors': [(0.5, 0.2), (0.5, 0.2)], 'color': (255, 255, 255, 255), 'rotateAxis': (1, 0)})
+                self.mid_plot.addItem(day_marker) # add to plot
+                self.day_markers.append(day_marker) # add to list
+            # show / hide day markers based on user setting
+            self.toggle_day_markers()
+            
+        # add mid plot marker on top of data
+        self.mid_plot.addItem(self.mid_plot_marker)
+        self.mid_plot_marker.setBounds((0, len(x)-1))
+        self.mid_plot_marker.setPos(0)
+        self.sync_markers(self.mid_plot_marker)
     
-    def update_plot(self):
+    def update_size_dist_plot(self):
         """
         Update the size_dist_plot to show the selected scan.
         Used when the marker is moved.
@@ -1285,22 +1451,35 @@ class MainWindow(QMainWindow):
         self.size_dist_plot.plot(x_values, y_values, pen=pg.mkPen(color=(126, 122, 122),style=Qt.DashLine,width=2),symbol=None, name="Single scan")
         self.size_dist_plot.plot(x2_values, y2_values, pen=pg.mkPen(color=(118, 209, 58),width=2), symbol=None, name=f'Average over {self.avg_n_input.text()} scans')
 
+        # update plot title to show current scan start time
+        self.update_size_dist_plot_title()
+
     # when button is clicked, reload data to apply changes
     def remove_errors_clicked(self):
         if self.data_df is not None:
-            self.refresh_files()
+            # reset inversion dataframes, remove or restore data with errors, and re-plot raw data
+            self.Ninv = None
+            self.Ninv_avg = None
+            self.remove_data_with_errors()
+            self.plot_raw()
 
     # Remove data with errors if button is checked
     def remove_data_with_errors(self):
-        # if Remove Data with Errors button is checked, replace data with NaN where errors are present
+        # if Remove Data with Errors button is checked, drop rows where errors are present
         if self.remove_error_data_btn.isChecked():
             if self.data_df is not None:
+                # make a copy of data_df as backup
+                self.data_df_backup = self.data_df.copy()
                 # remove rows with PSM errors
                 self.data_df = self.data_df[self.data_df['PSM_system_status_error'] == '0000000000000000']
                 # remove rows with CPC errors
                 self.data_df = self.data_df[self.data_df['CPC_system_status_error'] == '0000000000000000']
                 # reset dataframe index
                 self.data_df.reset_index(drop=True, inplace=True)
+        else: # if button is unchecked, restore data from backup
+            if self.data_df_backup is not None:
+                self.data_df = self.data_df_backup.copy()
+                self.data_df_backup = None
 
     def check_instrument_errors(self, df):
 
@@ -1417,25 +1596,40 @@ class MainWindow(QMainWindow):
         self.calibration_df = self.calibration_df.sort_values(by=['cal_satflow'], ascending=False)
         self.calibration_df = self.calibration_df.reset_index(drop=True)
 
-        # find satlow up and down transitions and average satflow_diff over 20s
-        satflow_diff = np.convolve(np.diff(self.data_df['satflow']), np.ones((n_average,))/n_average, mode='valid')
+        # if valid Scan status values in data, use them to define up and down scans
+        if 'Scan status' in self.data_df.columns and 9 not in self.data_df['Scan status'].values:
+            print("Scan status column found.")
+            # set rising and high to upscan (1), falling and low to downscan (-1), other mode or nan to 0
+            self.data_df['up_scan'] = self.data_df['Scan status'].apply(lambda x: 1 if x in [1,2] else -1 if x in [3,0] else 0)
+            # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
+            self.data_df = self.data_df[self.data_df['up_scan'] != 0]
+            # add scan number from the point of changing scans
+            self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
 
-        # Force the times when average flow over 20 s is zero to upscan (or downscan)
-        satflow_diff[satflow_diff == 0] = -0.01
+            # print("unique up_scan values:", self.data_df['up_scan'].unique())
+            # print("unique scan_no values:", self.data_df['scan_no'].unique())
+            # print(self.data_df[['t','satflow','up_scan','scan_no']].dropna())
 
-        # +4 to account for the moving average start and stop
-        nan_filler = np.zeros(int((n_average+4)/2))
-        nan_filler[:] = np.nan
+        # otherwise, use averaged satflow direction to define up and down scans
+        else:
+            # find satlow up and down transitions and average satflow_diff over 20s
+            satflow_diff = np.convolve(np.diff(self.data_df['satflow']), np.ones((n_average,))/n_average, mode='valid')
+            # Force the times when average flow over 20 s is zero to upscan (or downscan)
+            satflow_diff[satflow_diff == 0] = -0.01
+            # +4 to account for the moving average start and stop
+            nan_filler = np.zeros(int((n_average+4)/2))
+            nan_filler[:] = np.nan
+            self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
+            # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
+            self.data_df = self.data_df[self.data_df['up_scan'] != 0]
+            # Add scan number from the point of changing scans
+            self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
+            # filter satflow 0 out of the data
+            self.data_df = self.data_df[self.data_df['satflow'] != 0]
 
-        self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
-        # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
-        self.data_df = self.data_df[self.data_df['up_scan'] != 0]
-
-        # Add scan number from the point of changing scans
-        self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
-
-        # filter satflow 0 out of the data
-        self.data_df = self.data_df[self.data_df['satflow'] != 0]
+            # print("unique up_scan values:", self.data_df['up_scan'].unique())
+            # print("unique scan_no values:", self.data_df['scan_no'].unique())
+            # print(self.data_df[['t','satflow','up_scan','scan_no']].dropna())
 
         return self.calibration_df, self.data_df
 
@@ -1550,27 +1744,27 @@ class MainWindow(QMainWindow):
                 print(f"Scan {i} at {scan_start_time_str} has faulty length: {scan_length} seconds")
                 faulty_scans.append(i)
         
-        # check scan start and end values
-        print("Validating scan start and end values...")
-        max_satflow_limit = self.max_satflow_limit
-        min_satflow_limit = self.min_satflow_limit
-        print(f"Max satflow limit: {max_satflow_limit}, Min satflow limit: {min_satflow_limit}")
-        # check min and max satflow values of each scan
-        for i in range(len(self.n_scans)):
-            scan_max_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].max()
-            scan_min_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].min()
-            # if max satflow doesn't go past max_satflow_limit, mark as faulty scan
-            if scan_max_satflow <= max_satflow_limit:
-                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
-                print(f"Scan {i} at {scan_start_time_str} has faulty max satflow: {scan_max_satflow}")
-                if i not in faulty_scans:
-                    faulty_scans.append(i)
-            # if scan min satflow doesn't go below min_satflow_limit, mark as faulty scan
-            if scan_min_satflow >= min_satflow_limit: # lowest satflow at highest bin edge
-                scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
-                print(f"Scan {i} at {scan_start_time_str} has faulty min satflow: {scan_min_satflow}")
-                if i not in faulty_scans:
-                    faulty_scans.append(i)
+        # # check scan start and end values
+        # print("Validating scan start and end values...")
+        # max_satflow_limit = self.max_satflow_limit
+        # min_satflow_limit = self.min_satflow_limit
+        # print(f"Max satflow limit: {max_satflow_limit}, Min satflow limit: {min_satflow_limit}")
+        # # check min and max satflow values of each scan
+        # for i in range(len(self.n_scans)):
+        #     scan_max_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].max()
+        #     scan_min_satflow = self.data_df[self.data_df['scan_no'] == i]['satflow'].min()
+        #     # if max satflow doesn't go past max_satflow_limit, mark as faulty scan
+        #     if scan_max_satflow <= max_satflow_limit:
+        #         scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+        #         print(f"Scan {i} at {scan_start_time_str} has faulty max satflow: {scan_max_satflow}")
+        #         if i not in faulty_scans:
+        #             faulty_scans.append(i)
+        #     # if scan min satflow doesn't go below min_satflow_limit, mark as faulty scan
+        #     if scan_min_satflow >= min_satflow_limit: # lowest satflow at highest bin edge
+        #         scan_start_time_str = pd.to_datetime(self.scan_start_time[i], unit='s').strftime('%Y-%m-%d %H:%M:%S')
+        #         print(f"Scan {i} at {scan_start_time_str} has faulty min satflow: {scan_min_satflow}")
+        #         if i not in faulty_scans:
+        #             faulty_scans.append(i)
 
         # if no faulty scans found, return
         if len(faulty_scans) == 0:
@@ -1620,6 +1814,12 @@ class MainWindow(QMainWindow):
         self.Ninv = self.Ninv.drop(self.Ninv.index[0])
         self.Ninv['UpperDp'] = np.flip(self.bin_lims[1:])
         self.Ninv['LowerDp'] = np.flip(self.bin_lims[:-1])
+
+        # set all negative values to nan
+        skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
+        temp = self.Ninv.iloc[:, skip:]
+        temp[temp < 0] = np.nan
+        self.Ninv.iloc[:, skip:] = temp
         
         # Repeat the process for the averaged data
         self.Ninv_avg = self.Nbinned[['bins','LowerDp','UpperDp','dlogDp','MaxDeteff']]
@@ -1637,6 +1837,12 @@ class MainWindow(QMainWindow):
         self.Ninv_avg = self.Ninv_avg.drop(self.Ninv_avg.index[0])
         self.Ninv_avg['UpperDp'] = np.flip(self.bin_lims[1:])
         self.Ninv_avg['LowerDp'] = np.flip(self.bin_lims[:-1])
+
+        # set all negative values to nan
+        skip = 6 # skip 6 metadata columns: bins, LowerDp, UpperDp, dlogDp, MaxDeteff, binCenter
+        temp = self.Ninv_avg.iloc[:, skip:]
+        temp[temp < 0] = np.nan
+        self.Ninv_avg.iloc[:, skip:] = temp
 
     # show / hide middle plot day markers based on user setting
     def toggle_day_markers(self):
@@ -1667,7 +1873,6 @@ class MainWindow(QMainWindow):
         else:
             cur_pos_scan_index = int(self.mid_plot_marker.getXPos())
             self.raw_plot_marker.setPos(int(self.scan_start_times_posix[cur_pos_scan_index]))
-        #self.update_plot_title()
 
     def checkbox_button_state_changed(self, state):
         print("Checkbox state changed:", state)

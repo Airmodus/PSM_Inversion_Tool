@@ -1,4 +1,39 @@
-# PSM Inversion Tool - Software change log 
+# PSM Inversion Tool - Software change log
+
+### 0.9.4 - 2025.12.05
+- changed scan status detection: rising 1 & 2 (was 0 & 1), falling 3 & 0 (was 2 & 3)
+
+### 0.9.3 - 2025.11.27
+- 10 Hz CPC filename lookup fix (device nickname compatibility)
+- removed scan min/max flow check from quality filter (Raw data quality filtering)
+
+### 0.9.2 - 2025.11.24
+- 10 Hz file lookup with multiple CPC IDN values
+
+### 0.9.1 - 2025.11.24
+- 10 Hz 'Remove data with errors' support
+- Fixed file label sizes
+
+### 0.9.0 - 2025.11.20
+- 10 Hz conversion (controls and functions)
+
+### 0.8.9 - 2025.09.10
+- Set negative values to NaN
+
+### 0.8.8 - 2025.09.03
+- Average plot toggle (change view instantly)
+
+### 0.8.7 - 2025.09.03
+- Plot fixes (uniform layouts and titles)
+
+### 0.8.6 - 2025.09.01
+- New logo
+
+### 0.8.5 - 2025.09.01
+- Logarithmic diameter axis
+
+### 0.8.4 - 2025.08.29
+- Filename split bug fix (error output message)
 
 ### 0.8.3 - 2025.08.27
 - Scan detection numbering bug fix
