@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.9.4"
+version_number = "0.9.5"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -431,7 +431,7 @@ class MainWindow(QMainWindow):
         avg_n_label = QLabel("Average number")
         avg_n_label.setToolTip("Number of data points to average over")
         left_layout.addWidget(avg_n_label,5,0)
-        self.avg_n_input = QLineEdit()
+        self.avg_n_input = QLineEdit("5")
         self.avg_n_input.setFixedWidth(30)
         validator = QIntValidator()
         self.avg_n_input.setValidator(validator)
@@ -446,7 +446,7 @@ class MainWindow(QMainWindow):
         dil_validator.setLocale(locale)
         dil_validator.setNotation(QDoubleValidator.StandardNotation)
         dil_validator.setDecimals(2)
-        self.ext_dilution_fac_input = QLineEdit()
+        self.ext_dilution_fac_input = QLineEdit("1")
         self.ext_dilution_fac_input.setFixedWidth(30)
         self.ext_dilution_fac_input.setValidator(dil_validator)
         left_layout.addWidget(self.ext_dilution_fac_input,6,1)
@@ -843,9 +843,6 @@ class MainWindow(QMainWindow):
 
         # concatenate dataframe to self.data_df
         self.data_df = pd.concat([self.data_df, current_data_df], ignore_index=True)
-
-        self.avg_n_input.setText("5")
-        self.ext_dilution_fac_input.setText("1")
     
     def find_data_gaps(self):
         # if there are gaps longer than 2 seconds, store the gap's starting time
@@ -895,6 +892,8 @@ class MainWindow(QMainWindow):
                     self.data_file_label.setText(f"{len(file_names)} files loaded, hover to see names")
                     self.data_file_label.setToolTip("\n".join(file_names))
                 
+                previous_model = self.model # store previous model for comparison before resetting
+                
                 self.data_df = pd.DataFrame() # reset data_df
                 self.data_df_backup = None # reset data_df_backup
                 self.cpc_df = None # reset cpc_df
@@ -922,7 +921,8 @@ class MainWindow(QMainWindow):
                 self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
-                self.update_bin_selection() # update bin selection options according to model and min/max Dp
+                if self.model != previous_model: # if model has changed, update bin selection
+                    self.update_bin_selection() # update bin selection options according to model and min/max Dp
 
                 # restore cursor to normal
                 self.application.restoreOverrideCursor()
