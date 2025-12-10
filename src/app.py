@@ -442,8 +442,7 @@ class MainWindow(QMainWindow):
         # Allow for float values in the external dilution factor input
         dil_validator = QDoubleValidator()
         # Change locale to English to allow for decimal point
-        locale = QLocale(QLocale.English, QLocale.UnitedStates)
-        dil_validator.setLocale(locale)
+        dil_validator.setLocale(QLocale(QLocale.English, QLocale.UnitedStates))
         dil_validator.setNotation(QDoubleValidator.StandardNotation)
         dil_validator.setDecimals(2)
         self.ext_dilution_fac_input = QLineEdit("1")
@@ -462,16 +461,30 @@ class MainWindow(QMainWindow):
         self.bin_selection = QComboBox()
         left_layout.addWidget(self.bin_selection,4,3)
 
-        bin_limits_label = QLabel("Bin limits:")
+        bin_limits_label = QLabel("Bin limits")
         left_layout.addWidget(bin_limits_label,5,2)
         # input for bin limits, updated when bin_selection is changed
         self.bin_limits_edit = QLineEdit()
         bin_validator = QRegExpValidator(QRegExp("[0-9. ]+")) # allow numbers, dots and spaces
         self.bin_limits_edit.setValidator(bin_validator)
         self.bin_limits_edit.textEdited.connect(self.bin_limits_edited) # set bin selection to "custom" when edited
-        left_layout.addWidget(self.bin_limits_edit,6,2,1,3)
+        left_layout.addWidget(self.bin_limits_edit,5,3,1,2)
         # connect currentTextChanged signal to show_bin_limits function
         self.bin_selection.currentTextChanged.connect(lambda text: self.show_bin_limits(text))
+
+        CPC_time_lag_label = QLabel("CPC time lag (s)")
+        left_layout.addWidget(CPC_time_lag_label,6,2)
+        # input for CPC time lag in seconds
+        self.CPC_time_lag_input = QLineEdit("3")
+        self.CPC_time_lag_input.setFixedWidth(30)
+        # add validator with 1 decimal place (10 Hz resolution)
+        lag_validator = QDoubleValidator()
+        lag_validator.setLocale(QLocale(QLocale.English, QLocale.UnitedStates))
+        lag_validator.setNotation(QDoubleValidator.StandardNotation)
+        lag_validator.setDecimals(1)
+        lag_validator.setBottom(0)
+        self.CPC_time_lag_input.setValidator(lag_validator)
+        left_layout.addWidget(self.CPC_time_lag_input,6,3)
 
         left_layout.setColumnStretch(5, 1) # add stretch to column 5 to push widgets to the left
 
@@ -802,8 +815,6 @@ class MainWindow(QMainWindow):
                 # if model doesn't match current file, raise error
                 elif self.model != 'PSM2.0':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
-                # set parameters according to PSM 2.0
-                self.CPC_time_lag = -3
             else: # A10
                 print("A10")
                 # set model if not set (1st file)
@@ -813,8 +824,6 @@ class MainWindow(QMainWindow):
                 # if model doesn't match current file, raise error
                 elif self.model != 'A10':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
-                # set parameters according to A10
-                self.CPC_time_lag = -3 # Same here, check this number
 
         # Read the temporary file into a DataFrame and rename relevant columns
         if self.model == 'PSM2.0':
@@ -834,12 +843,6 @@ class MainWindow(QMainWindow):
             current_data_df.rename(columns={1: 'concentration', 3: 'satflow', 17: 'dilution', 44: 'CPC_system_status_error', 46: 'PSM_system_status_error'}, inplace=True)
             # convert time column data to datetime, A10 format: DD.MM.YYYY hh:mm:ss
             current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
-
-        # Apply lag correction to concentration columns (i.e. shift the concentration values up)
-        current_data_df['concentration'] = current_data_df['concentration'].shift(self.CPC_time_lag)
-
-        # replace inf values with nan
-        current_data_df.replace([np.inf, -np.inf], np.nan, inplace=True)
 
         # concatenate dataframe to self.data_df
         self.data_df = pd.concat([self.data_df, current_data_df], ignore_index=True)
@@ -913,6 +916,15 @@ class MainWindow(QMainWindow):
                         # print filename and error message to error output
                         self.error_output.append(f"Error reading file {file_name.split('/')[-1]}:\n{str(e)}")
                 
+                # apply lag correction to concentration column (i.e. shift the concentration values up)
+                if self.CPC_time_lag_input.text() == "":
+                    self.CPC_time_lag = 0
+                else:
+                    self.CPC_time_lag = int(round(float(self.CPC_time_lag_input.text()))) # get CPC time lag from input
+                self.CPC_time_lag_input.setText(str(self.CPC_time_lag)) # set CPC time lag input to integer value
+                self.data_df['concentration'] = self.data_df['concentration'].shift(-1 * self.CPC_time_lag) # negative shifts upwards
+                # replace inf values with nan
+                self.data_df.replace([np.inf, -np.inf], np.nan, inplace=True)
                 # clean nan satflow and concentration values from data
                 self.data_df.dropna(subset=['satflow', 'concentration'], inplace=True)
                 self.data_df.reset_index(drop=True, inplace=True)
