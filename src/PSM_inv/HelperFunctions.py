@@ -180,3 +180,49 @@ def correct_concentration(df, alpha, mu, sigma, slope, intercept, shift):
     df.drop(['flow', 'CPC_concentration'], axis=1, inplace=True)
     
     return df
+
+def shift_concentration(df, time_lag):
+
+    # check if data is 10 Hz by calculating median time difference
+    time_diffs = df['t'].diff().dt.total_seconds().dropna()
+    median_time_diff = time_diffs.median()
+    print("median_time_diff:", median_time_diff)
+    if median_time_diff == 0.1:
+        ten_hz = True
+    else:
+        ten_hz = False
+    # convert time_lag to index amount
+    if time_lag == "":
+        time_lag = 0
+        time_lag_index = 0
+    elif ten_hz:
+        time_lag = float(time_lag) # use float value
+        time_lag_index = int(time_lag * 10) # convert seconds to 10 Hz index
+    else:
+        time_lag = int(round(float(time_lag))) # round to nearest integer
+        time_lag_index = time_lag # index matches seconds for 1 Hz data
+    # shift values upwards
+    df['concentration'] = df['concentration'].shift(-1 * time_lag_index)
+    # check if there are gaps larger than 2 seconds and set concentration to nan before the gap
+    gap_indices = df.index[df['t'].diff().dt.total_seconds() > 2].tolist()
+    print("gap_indices:", gap_indices)
+    for gap_index in gap_indices:
+        for i in range(0, abs(time_lag_index)):
+            if gap_index - 1 - i >= 0: # check index bounds
+                # set concentration to nan for last values before the gap according to lag time
+                df.iloc[gap_index - 1 - i, df.columns.get_loc('concentration')] = np.nan
+    # remove inf and nan values from data
+    df = clean_data(df)
+    # convert time_lag back to string for UI display
+    time_lag = str(time_lag)
+
+    return df, time_lag
+
+def clean_data(df):
+    # replace inf values with nan
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    # clean nan satflow and concentration values from data
+    df.dropna(subset=['satflow', 'concentration'], inplace=True)
+    # reset index
+    df.reset_index(drop=True, inplace=True)
+    return df
