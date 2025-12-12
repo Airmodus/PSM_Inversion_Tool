@@ -1,5 +1,13 @@
 # PSM Inversion Tool - Software change log
 
+### 0.10.0 - 2025.12.11
+- input for CPC time lag in seconds (1 decimal place, round if 1 Hz data)
+- shift concentration when inverting data (raw data is unshifted)
+- use copy of data_df in inversion
+
+### 0.9.5 - 2025.12.09
+- keep settings when loading and refreshing files (average number, dilution factor, number of bins)
+
 ### 0.9.4 - 2025.12.05
 - changed scan status detection: rising 1 & 2 (was 0 & 1), falling 3 & 0 (was 2 & 3)
 

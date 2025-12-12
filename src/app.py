@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.9.4"
+version_number = "0.10.0"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -431,7 +431,7 @@ class MainWindow(QMainWindow):
         avg_n_label = QLabel("Average number")
         avg_n_label.setToolTip("Number of data points to average over")
         left_layout.addWidget(avg_n_label,5,0)
-        self.avg_n_input = QLineEdit()
+        self.avg_n_input = QLineEdit("5")
         self.avg_n_input.setFixedWidth(30)
         validator = QIntValidator()
         self.avg_n_input.setValidator(validator)
@@ -442,11 +442,10 @@ class MainWindow(QMainWindow):
         # Allow for float values in the external dilution factor input
         dil_validator = QDoubleValidator()
         # Change locale to English to allow for decimal point
-        locale = QLocale(QLocale.English, QLocale.UnitedStates)
-        dil_validator.setLocale(locale)
+        dil_validator.setLocale(QLocale(QLocale.English, QLocale.UnitedStates))
         dil_validator.setNotation(QDoubleValidator.StandardNotation)
         dil_validator.setDecimals(2)
-        self.ext_dilution_fac_input = QLineEdit()
+        self.ext_dilution_fac_input = QLineEdit("1")
         self.ext_dilution_fac_input.setFixedWidth(30)
         self.ext_dilution_fac_input.setValidator(dil_validator)
         left_layout.addWidget(self.ext_dilution_fac_input,6,1)
@@ -462,16 +461,30 @@ class MainWindow(QMainWindow):
         self.bin_selection = QComboBox()
         left_layout.addWidget(self.bin_selection,4,3)
 
-        bin_limits_label = QLabel("Bin limits:")
+        bin_limits_label = QLabel("Bin limits")
         left_layout.addWidget(bin_limits_label,5,2)
         # input for bin limits, updated when bin_selection is changed
         self.bin_limits_edit = QLineEdit()
         bin_validator = QRegExpValidator(QRegExp("[0-9. ]+")) # allow numbers, dots and spaces
         self.bin_limits_edit.setValidator(bin_validator)
         self.bin_limits_edit.textEdited.connect(self.bin_limits_edited) # set bin selection to "custom" when edited
-        left_layout.addWidget(self.bin_limits_edit,6,2,1,3)
+        left_layout.addWidget(self.bin_limits_edit,5,3,1,2)
         # connect currentTextChanged signal to show_bin_limits function
         self.bin_selection.currentTextChanged.connect(lambda text: self.show_bin_limits(text))
+
+        CPC_time_lag_label = QLabel("CPC time lag (s)")
+        left_layout.addWidget(CPC_time_lag_label,6,2)
+        # input for CPC time lag in seconds
+        self.CPC_time_lag_input = QLineEdit("3")
+        self.CPC_time_lag_input.setFixedWidth(30)
+        # add validator with 1 decimal place (10 Hz resolution)
+        lag_validator = QDoubleValidator()
+        lag_validator.setLocale(QLocale(QLocale.English, QLocale.UnitedStates))
+        lag_validator.setNotation(QDoubleValidator.StandardNotation)
+        lag_validator.setDecimals(1)
+        lag_validator.setBottom(0)
+        self.CPC_time_lag_input.setValidator(lag_validator)
+        left_layout.addWidget(self.CPC_time_lag_input,6,3)
 
         left_layout.setColumnStretch(5, 1) # add stretch to column 5 to push widgets to the left
 
@@ -574,6 +587,7 @@ class MainWindow(QMainWindow):
         self.calibration_df = None
         self.cpc_df = None
         self.data_df_backup = None
+        self.data_df_copy = None
         self.nais_data = None
         self.current_filenames = None
         self.Ninv = None
@@ -584,7 +598,6 @@ class MainWindow(QMainWindow):
         self.min_dp = None
         self.max_satflow_limit = None
         self.min_satflow_limit = None
-        self.gap_start_times = []
 
         self.extra_features = ExtraFeatures()
         self.extra_features.inversion_btn.clicked.connect(self.custom_inversion)
@@ -738,8 +751,16 @@ class MainWindow(QMainWindow):
 
                     # Inversion --------------------------------------------------------
 
+                    # use copy of data_df to prevent changes to original data
+                    self.data_df_copy = self.data_df.copy()
+
+                    # apply lag correction to concentration column (i.e. shift the concentration values up)
+                    time_lag = self.CPC_time_lag_input.text() # get time lag from input
+                    self.data_df_copy, time_lag = shift_concentration(self.data_df_copy, time_lag)
+                    self.CPC_time_lag_input.setText(time_lag) # update value in input
+
                     # update the measurement data by running it through inst_calib function
-                    self.calibration_df, self.data_df  = self.inst_calib()
+                    self.calibration_df, self.data_df_copy  = self.inst_calib()
 
                     self.Nbinned, self.n_scans, self.scan_start_time, self.Dplot = self.bin_data(bin_limits)
 
@@ -761,7 +782,7 @@ class MainWindow(QMainWindow):
                     self.step_inversion()
 
                     # Convert Timestamp objects to POSIX timestamps
-                    self.posix_timestamps = self.data_df['t'].apply(lambda x: x.timestamp())
+                    self.posix_timestamps = self.data_df_copy['t'].apply(lambda x: x.timestamp())
 
                     # Update mid plot
                     self.update_mid_plot()
@@ -802,8 +823,6 @@ class MainWindow(QMainWindow):
                 # if model doesn't match current file, raise error
                 elif self.model != 'PSM2.0':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
-                # set parameters according to PSM 2.0
-                self.CPC_time_lag = -3
             else: # A10
                 print("A10")
                 # set model if not set (1st file)
@@ -813,8 +832,6 @@ class MainWindow(QMainWindow):
                 # if model doesn't match current file, raise error
                 elif self.model != 'A10':
                     raise Exception("Mixed data files: PSM 2.0 and A10")
-                # set parameters according to A10
-                self.CPC_time_lag = -3 # Same here, check this number
 
         # Read the temporary file into a DataFrame and rename relevant columns
         if self.model == 'PSM2.0':
@@ -835,30 +852,8 @@ class MainWindow(QMainWindow):
             # convert time column data to datetime, A10 format: DD.MM.YYYY hh:mm:ss
             current_data_df['t'] = pd.to_datetime(current_data_df.iloc[:, 0], format='%d.%m.%Y %H:%M:%S')
 
-        # Apply lag correction to concentration columns (i.e. shift the concentration values up)
-        current_data_df['concentration'] = current_data_df['concentration'].shift(self.CPC_time_lag)
-
-        # replace inf values with nan
-        current_data_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-
         # concatenate dataframe to self.data_df
         self.data_df = pd.concat([self.data_df, current_data_df], ignore_index=True)
-
-        self.avg_n_input.setText("5")
-        self.ext_dilution_fac_input.setText("1")
-    
-    def find_data_gaps(self):
-        # if there are gaps longer than 2 seconds, store the gap's starting time
-        self.gap_start_times = []
-        for i in range(0, len(self.data_df)-1):
-            # if the time difference between two consecutive rows is greater than 2 seconds
-            if (self.data_df['t'].iloc[i+1] - self.data_df['t'].iloc[i]).total_seconds() > 2:
-                # store the starting time of the gap
-                self.gap_start_times.append(self.data_df['t'].iloc[i])
-                # set concentration values to nan for last seconds before the gap according to CPC_time_lag
-                for j in range(0, abs(self.CPC_time_lag)):
-                    self.data_df.iloc[i-j, self.data_df.columns.get_loc('concentration')] = np.nan
-        print("Gap start times:", self.gap_start_times)
 
     # refreshes data by reloading current files
     def refresh_files(self):
@@ -895,13 +890,14 @@ class MainWindow(QMainWindow):
                     self.data_file_label.setText(f"{len(file_names)} files loaded, hover to see names")
                     self.data_file_label.setToolTip("\n".join(file_names))
                 
+                previous_model = self.model # store previous model for comparison before resetting
+                
                 self.data_df = pd.DataFrame() # reset data_df
                 self.data_df_backup = None # reset data_df_backup
                 self.cpc_df = None # reset cpc_df
                 self.model = None # reset device model variable
                 self.Ninv = None # reset inversion dataframe
                 self.Ninv_avg = None # reset inversion average dataframe
-                self.gap_start_times = [] # reset gap start times
                 # read each file and append to dataframe
                 for file_name in file_names:
                     try:
@@ -914,15 +910,12 @@ class MainWindow(QMainWindow):
                         # print filename and error message to error output
                         self.error_output.append(f"Error reading file {file_name.split('/')[-1]}:\n{str(e)}")
                 
-                # clean nan satflow and concentration values from data
-                self.data_df.dropna(subset=['satflow', 'concentration'], inplace=True)
-                self.data_df.reset_index(drop=True, inplace=True)
-
-                self.find_data_gaps() # scan for data gaps
+                self.data_df = clean_data(self.data_df) # remove inf and nan values from data
                 self.display_errors(self.data_df) # display PSM and CPC errors
                 self.remove_data_with_errors() # remove errors if button is checked
                 self.plot_raw() # plot raw data
-                self.update_bin_selection() # update bin selection options according to model and min/max Dp
+                if self.model != previous_model: # if model has changed, update bin selection
+                    self.update_bin_selection() # update bin selection options according to model and min/max Dp
 
                 # restore cursor to normal
                 self.application.restoreOverrideCursor()
@@ -1597,41 +1590,41 @@ class MainWindow(QMainWindow):
         self.calibration_df = self.calibration_df.reset_index(drop=True)
 
         # if valid Scan status values in data, use them to define up and down scans
-        if 'Scan status' in self.data_df.columns and 9 not in self.data_df['Scan status'].values:
+        if 'Scan status' in self.data_df_copy.columns and 9 not in self.data_df_copy['Scan status'].values:
             print("Scan status column found.")
             # set rising and high to upscan (1), falling and low to downscan (-1), other mode or nan to 0
-            self.data_df['up_scan'] = self.data_df['Scan status'].apply(lambda x: 1 if x in [1,2] else -1 if x in [3,0] else 0)
+            self.data_df_copy['up_scan'] = self.data_df_copy['Scan status'].apply(lambda x: 1 if x in [1,2] else -1 if x in [3,0] else 0)
             # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
-            self.data_df = self.data_df[self.data_df['up_scan'] != 0]
+            self.data_df_copy = self.data_df_copy[self.data_df_copy['up_scan'] != 0]
             # add scan number from the point of changing scans
-            self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
+            self.data_df_copy['scan_no'] = np.cumsum(abs(self.data_df_copy['up_scan'].diff() / 2))
 
-            # print("unique up_scan values:", self.data_df['up_scan'].unique())
-            # print("unique scan_no values:", self.data_df['scan_no'].unique())
-            # print(self.data_df[['t','satflow','up_scan','scan_no']].dropna())
+            # print("unique up_scan values:", self.data_df_copy['up_scan'].unique())
+            # print("unique scan_no values:", self.data_df_copy['scan_no'].unique())
+            # print(self.data_df_copy[['t','satflow','up_scan','scan_no']].dropna())
 
         # otherwise, use averaged satflow direction to define up and down scans
         else:
             # find satlow up and down transitions and average satflow_diff over 20s
-            satflow_diff = np.convolve(np.diff(self.data_df['satflow']), np.ones((n_average,))/n_average, mode='valid')
+            satflow_diff = np.convolve(np.diff(self.data_df_copy['satflow']), np.ones((n_average,))/n_average, mode='valid')
             # Force the times when average flow over 20 s is zero to upscan (or downscan)
             satflow_diff[satflow_diff == 0] = -0.01
             # +4 to account for the moving average start and stop
             nan_filler = np.zeros(int((n_average+4)/2))
             nan_filler[:] = np.nan
-            self.data_df['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
+            self.data_df_copy['up_scan'] = np.append(np.append(nan_filler, np.sign(moving_average(satflow_diff,5))), nan_filler)
             # filter up_scan 0 values out of the data (leave only 1 and -1 for scan numbering)
-            self.data_df = self.data_df[self.data_df['up_scan'] != 0]
+            self.data_df_copy = self.data_df_copy[self.data_df_copy['up_scan'] != 0]
             # Add scan number from the point of changing scans
-            self.data_df['scan_no'] = np.cumsum(abs(self.data_df['up_scan'].diff() / 2))
+            self.data_df_copy['scan_no'] = np.cumsum(abs(self.data_df_copy['up_scan'].diff() / 2))
             # filter satflow 0 out of the data
-            self.data_df = self.data_df[self.data_df['satflow'] != 0]
+            self.data_df_copy = self.data_df_copy[self.data_df_copy['satflow'] != 0]
 
-            # print("unique up_scan values:", self.data_df['up_scan'].unique())
-            # print("unique scan_no values:", self.data_df['scan_no'].unique())
-            # print(self.data_df[['t','satflow','up_scan','scan_no']].dropna())
+            # print("unique up_scan values:", self.data_df_copy['up_scan'].unique())
+            # print("unique scan_no values:", self.data_df_copy['scan_no'].unique())
+            # print(self.data_df_copy[['t','satflow','up_scan','scan_no']].dropna())
 
-        return self.calibration_df, self.data_df
+        return self.calibration_df, self.data_df_copy
 
     # Bin the raw data to enable avaraging over scans, and to yield supplementary data for the inversion
     def bin_data(self, bin_limits):
@@ -1650,20 +1643,20 @@ class MainWindow(QMainWindow):
         print("lowest bin limit", self.lowest_bin_limit)
 
         # add bins column
-        self.data_df['bins'] = pd.cut(self.data_df['satflow'],bins)
+        self.data_df_copy['bins'] = pd.cut(self.data_df_copy['satflow'],bins)
 
         # Calculate bin mean concentration grouped by scans and flow bins
-        self.data_df['bin_mean_c'] = self.data_df.groupby(['bins', 'scan_no'])['concentration'].transform('mean')
+        self.data_df_copy['bin_mean_c'] = self.data_df_copy.groupby(['bins', 'scan_no'])['concentration'].transform('mean')
 
         # Add the dilution factor to the dataframe
         dilution_factor = float(self.ext_dilution_fac_input.text())
-        self.data_df['bin_mean_c'] = self.data_df['bin_mean_c'] * dilution_factor
+        self.data_df_copy['bin_mean_c'] = self.data_df_copy['bin_mean_c'] * dilution_factor
 
-        df_binmean = self.data_df[['bins', 'scan_no','bin_mean_c']].groupby(['bins', 'scan_no']).mean()
+        df_binmean = self.data_df_copy[['bins', 'scan_no','bin_mean_c']].groupby(['bins', 'scan_no']).mean()
         df_binmean.reset_index(inplace=True)
         self.n_scans = np.unique(df_binmean['scan_no'])
 
-        df_sorted = self.data_df[['t','scan_no']].sort_values(by=['t'], ascending=True)
+        df_sorted = self.data_df_copy[['t','scan_no']].sort_values(by=['t'], ascending=True)
         df_sorted = df_sorted.groupby('scan_no').first()
         self.scan_start_time = np.array(df_sorted.reset_index(drop=True))[:,0]
         scan_start_temp = pd.to_datetime(self.scan_start_time)
