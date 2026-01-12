@@ -872,8 +872,8 @@ class MainWindow(QMainWindow):
         else:
             options = QFileDialog.Option.ReadOnly
             file_names, _ = QFileDialog.getOpenFileNames(self, "Load data files", "", "PSM data files (*PSM*.dat);;All data files (*.dat);;All files (*)", options=options)
+            file_names.sort() # sort file names alphabetically
         if file_names:
-            # TODO if many files, ask user for confirmation before loading
             # set cursor to loading
             self.application.setOverrideCursor(Qt.WaitCursor)
             try:
