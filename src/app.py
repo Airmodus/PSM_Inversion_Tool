@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.10.0"
+version_number = "0.10.1"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -2036,7 +2036,8 @@ class MainWindow(QMainWindow):
                 save_data.insert(0, 'Scan start time', self.scan_start_time)
             
             # calculate concentration values above largest bin
-            larger_concentration = concentration_above_bins(self.scan_start_time, self.data_df, self.lowest_bin_limit)
+            dilution_factor = float(self.ext_dilution_fac_input.text())
+            larger_concentration = concentration_above_bins(self.scan_start_time, self.data_df, self.lowest_bin_limit, dilution_factor)
             # add result as column to save_data dataframe
             highest_dp = str(round(self.Ninv['UpperDp'].iloc[0], 2))
             save_data[('Dp >' + highest_dp + ' nm total number concentration')] = larger_concentration

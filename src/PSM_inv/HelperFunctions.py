@@ -3,7 +3,7 @@ import numpy as np
 import datetime as dt
 
 # Function for calculating concentration above largest bin
-def concentration_above_bins(scan_start_time, data_df, lowest_bin_limit):
+def concentration_above_bins(scan_start_time, data_df, lowest_bin_limit, dilution_factor):
 
     # store columns named 'concentration', 'satflow', 't' from data_df to data_df_copy
     data_df_copy = data_df.filter(items=['concentration', 'satflow', 't'], axis=1)
@@ -30,8 +30,10 @@ def concentration_above_bins(scan_start_time, data_df, lowest_bin_limit):
             # store nan in concentration_values
             concentration_values = np.append(concentration_values, np.nan)
         else:
-            # calculate average of concentration values in scan and round to 2 decimals
-            average_concentration = round(np.average(scan.iloc[:, 0]), 2)
+            # calculate average of concentration values in scan
+            average_concentration = np.average(scan.iloc[:, 0])
+            # apply dilution factor and round to 2 decimals
+            average_concentration = round(average_concentration * dilution_factor, 2)
             # store average_concentration in concentration_values
             concentration_values = np.append(concentration_values, average_concentration)
 

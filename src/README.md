@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log
 
+### 0.10.1 - 2026.01.12
+- apply external dilution factor to concentration above max bin (save data)
+
 ### 0.10.0 - 2025.12.11
 - input for CPC time lag in seconds (1 decimal place, round if 1 Hz data)
 - shift concentration when inverting data (raw data is unshifted)
