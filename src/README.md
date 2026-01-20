@@ -1,5 +1,8 @@
 # PSM Inversion Tool - Software change log
 
+### 0.10.2 - 2026.01.20
+- 10 Hz files: handle special characters in file path
+
 ### 0.10.1 - 2026.01.12
 - apply external dilution factor to concentration above max bin (save data)
 - sort loaded file names alphabetically, i.e. by timestamp (note: this was automatically done on Windows, but on Mac it was possible to load files in wrong order)
