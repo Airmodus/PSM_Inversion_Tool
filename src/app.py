@@ -4,7 +4,7 @@ from PSM_inv.InversionFunctions import *
 from PSM_inv.HelperFunctions import *
 
 # current version number displayed in the GUI (Major.Minor.Patch or Breaking.Feature.Fix)
-version_number = "0.10.1"
+version_number = "0.10.2"
 
 # define file paths according to run mode (exe or script)
 script_path = os.path.realpath(os.path.dirname(__file__)) # location of this file
@@ -1036,6 +1036,7 @@ class MainWindow(QMainWindow):
         folder_path = os.path.dirname(self.current_filenames[0])
         folder_path = folder_path.replace('\\', '/') + '/'
         print("folder path:", folder_path)
+        folder_path = glob.escape(folder_path) # escape special characters ('[') for glob search below
         for cpc_idn in cpc_idn_options:
             print("using CPC IDN:", cpc_idn)
             cpc_files = [] # list to store found cpc files
